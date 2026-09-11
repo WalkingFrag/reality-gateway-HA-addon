@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.3
+
+- Fixed: the three required options introduced in 0.1.2 (`vless_server`,
+  `vless_uuid`, `vless_reality_short_id`) were omitted from `options:`
+  entirely, which is the syntax for a truly *optional* field (paired with
+  `str?` in `schema:`), not a required one — the Supervisor Configuration UI
+  didn't render fields for them at all. Required-with-no-default in an HA
+  add-on means the key stays in `schema:` as plain `str` (no `?`) **and**
+  is present in `options:` with value `null`. Fixed to that pattern.
+
 ## 0.1.2
 
 - **Security fix:** `vless_server`, `vless_uuid`, and `vless_reality_short_id`
