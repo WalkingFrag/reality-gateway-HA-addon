@@ -201,3 +201,42 @@ host's network would work).
   actual appearance).
 - Whether `wg_peer_allowed_ip`/`wg_server_address` need IPv6 handling
   (out of scope for v1 unless it turns out to matter).
+
+## Post-install bug found and fixed live (needs to land in source)
+
+**2026-09-11, after first real install and testing:** real browser page
+loads (bbc.com, speed.cloudflare.com) hung indefinitely
+(`ERR_FAILED`/timeout) even though `curl` run from inside the add-on
+container against the same sites succeeded instantly with full content.
+Root cause: the sing-box config's `tun-reality` inbound had `"mtu":
+9000`, but the actual WireGuard tunnel from the router (`wg0`) runs at
+~1420 MTU. Small packets (TLS handshake) fit fine and misleadingly
+looked healthy in packet captures; real page payloads (tens of KB+)
+hit the MTU mismatch, and PMTU-discovery ICMP correction is commonly
+lost across a NAT+tunnel path like this, so it silently black-holed
+instead of erroring cleanly. Curl-based testing from inside the
+container never caught this because self-generated container traffic
+(`OUTPUT` chain marking) never actually traverses `wg0` — only real
+router-forwarded traffic does, and that's the one path that was broken.
+
+**Fix (applied live for verification, still needs to be made
+permanent here):**
+1. In the sing-box config template, change the `tun-reality` inbound's
+   `"mtu"` from `9000` to `1400`.
+2. In the routing service's `apply_routing_rules()` (or an equivalent
+   one-time init step), add an MSS-clamp safety net so this class of
+   bug can't silently recur even if the tun MTU and the real WG MTU
+   drift apart again in the future:
+   ```
+   iptables -t mangle -C FORWARD -o tun-reality -p tcp --tcp-flags SYN,RST SYN \
+     -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || \
+   iptables -t mangle -A FORWARD -o tun-reality -p tcp --tcp-flags SYN,RST SYN \
+     -j TCPMSS --clamp-mss-to-pmtu
+   ```
+
+**Testing lesson for whoever verifies this add-on next:** a test that
+only exercises the container's own locally-generated traffic (`OUTPUT`
+chain marking) can look completely healthy while the actual
+router-forwarded (`PREROUTING`/`wg0`) path — the only path real users'
+traffic ever takes — is broken. Always verify against traffic that
+enters via `wg0`, not just via a container-local curl.
