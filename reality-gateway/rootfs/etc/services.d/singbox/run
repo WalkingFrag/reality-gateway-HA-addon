@@ -1,0 +1,3 @@
+#!/command/with-contenv bashio
+# reality-gateway: sing-box supervised service
+exec sing-box run -c /etc/sing-box/config.json

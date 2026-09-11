@@ -1,0 +1,69 @@
+#!/command/with-contenv bashio
+# reality-gateway: routing supervised service
+# Waits for sing-box's tun-reality interface, then idempotently applies
+# the policy routing that sends wg0 traffic out via tun-reality.
+set -euo pipefail
+
+MAX_RETRIES=30
+RETRY_INTERVAL=2
+REAPPLY_INTERVAL=60
+
+wait_for_tun() {
+    local i=0
+    while (( i < MAX_RETRIES )); do
+        if ip link show tun-reality &>/dev/null; then
+            return 0
+        fi
+        sleep "${RETRY_INTERVAL}"
+        ((i++))
+    done
+    return 1
+}
+
+apply_routing_rules() {
+    if ! sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1; then
+        if [[ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null)" != "1" ]]; then
+            bashio::log.warning "net.ipv4.ip_forward is not 1 and /proc/sys is read-only in this container; IP forwarding may not work. If routing fails, verify ip_forward=1 on the Home Assistant host itself."
+        fi
+    fi
+
+    if ! iptables -t mangle -C PREROUTING -i wg0 -j MARK --set-mark 100 2>/dev/null; then
+        iptables -t mangle -A PREROUTING -i wg0 -j MARK --set-mark 100
+    fi
+
+    local existing_rules
+    existing_rules=$(ip rule show)
+    if ! grep -q 'fwmark 0x64 lookup 100' <<< "${existing_rules}"; then
+        ip rule add fwmark 100 table 100
+    fi
+
+    ip route replace default dev tun-reality table 100
+
+    if ! iptables -C DOCKER-USER -i wg0 -o tun-reality -j ACCEPT 2>/dev/null; then
+        iptables -I DOCKER-USER -i wg0 -o tun-reality -j ACCEPT
+    fi
+    if ! iptables -C DOCKER-USER -i tun-reality -o wg0 -j ACCEPT 2>/dev/null; then
+        iptables -I DOCKER-USER -i tun-reality -o wg0 -j ACCEPT
+    fi
+}
+
+# Fail-closed safety floor: seed a blackhole route in table 100 immediately,
+# before tun-reality is confirmed up. Without this, wg0 traffic marked for
+# table 100 would fall through to the main table (and out the host's normal
+# WAN, unencrypted) during the startup wait window or any later outage where
+# tun-reality disappears while the mangle/ip rule entries are still in place.
+# apply_routing_rules() overwrites this with the real route once tun-reality
+# is up, and keeps refreshing it every REAPPLY_INTERVAL, so it never needs to
+# be re-seeded after this point.
+ip route replace blackhole default table 100
+
+if ! wait_for_tun; then
+    bashio::log.error "tun-reality did not appear after $(( MAX_RETRIES * RETRY_INTERVAL ))s — sing-box may have failed to start; check its log"
+    exit 1
+fi
+
+bashio::log.info "tun-reality is up, applying routing rules"
+while true; do
+    apply_routing_rules
+    sleep "${REAPPLY_INTERVAL}"
+done
