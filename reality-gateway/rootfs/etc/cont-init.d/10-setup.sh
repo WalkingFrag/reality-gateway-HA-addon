@@ -95,7 +95,7 @@ render_singbox_config() {
       "tag": "tun-reality",
       "interface_name": "tun-reality",
       "address": ["172.19.0.1/30"],
-      "mtu": 9000,
+      "mtu": 1400,
       "auto_route": false,
       "strict_route": false,
       "stack": "system"

@@ -31,6 +31,15 @@ apply_routing_rules() {
         iptables -t mangle -A PREROUTING -i wg0 -j MARK --set-mark 100
     fi
 
+    # Defense-in-depth for the tun-reality/wg0 MTU mismatch bug found during
+    # first real-world testing (see the design spec's "Post-install bug"
+    # section): clamp outgoing TCP MSS to the actual path MTU on tun-reality
+    # so a future MTU drift between the two interfaces degrades gracefully
+    # (smaller segments) instead of silently black-holing larger page loads.
+    if ! iptables -t mangle -C FORWARD -o tun-reality -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null; then
+        iptables -t mangle -A FORWARD -o tun-reality -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+    fi
+
     local existing_rules
     existing_rules=$(ip rule show)
     if ! grep -q 'fwmark 0x64 lookup 100' <<< "${existing_rules}"; then

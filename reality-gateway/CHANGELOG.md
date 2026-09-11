@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.4
+
+- **Fixed:** real page loads (e.g. bbc.com) hung indefinitely even though
+  the tunnel otherwise looked healthy. Root cause: the sing-box
+  `tun-reality` inbound had `"mtu": 9000`, far larger than the real
+  WireGuard path's ~1420 MTU — small packets (DNS, TLS handshake) fit and
+  looked fine, but real page payloads hit an MTU black hole (PMTU-discovery
+  ICMP correction is commonly lost across NAT+tunnel paths like this one,
+  so it failed silently instead of erroring). `mtu` is now `1400`.
+- **Added:** a `TCPMSS --clamp-mss-to-pmtu` rule on the `FORWARD` chain for
+  `tun-reality`-bound traffic, so if the tun MTU and the real WireGuard MTU
+  ever drift apart again, TCP connections degrade gracefully instead of
+  silently black-holing.
+
 ## 0.1.3
 
 - Fixed: the three required options introduced in 0.1.2 (`vless_server`,
