@@ -1,11 +1,43 @@
 # Reality Gateway
 
-Version 0.2.0 supports multiple AmneziaWG 3.1 (AWG3) exit servers and
+Version 0.2.1 supports multiple AmneziaWG 3.1 (AWG3) exit servers and
 VLESS+Reality as the last fallback. Keenetic still connects to this add-on's
 `wg0` over ordinary WireGuard. The add-on routes the selected IPv4 traffic
 through one healthy exit at a time.
 
-Configure `awg_exits` in the add-on Configuration tab. Each list item is one
+For the simple setup, open the add-on Configuration tab, switch to YAML mode,
+and paste each complete AmneziaWG text profile under `awg_configs`:
+
+```yaml
+awg_configs:
+  - |
+    [Interface]
+    Address = 10.8.1.12/32
+    PrivateKey = <your client private key>
+    ...
+    [Peer]
+    PublicKey = <server public key>
+    Endpoint = <server IPv4>:<port>
+    ...
+  - |
+    [Interface]
+    ...
+    [Peer]
+    ...
+```
+
+Paste the full exported `[Interface]` and `[Peer]` blocks, including all AWG3
+parameters, in place of the shortened example. The first profile is preferred,
+the second is backup, and VLESS is last. Raw `vpn://` share links are not
+accepted here; export the text profile from Amnezia first. Keep the profiles
+in Home Assistant options only, never in a GitHub commit.
+
+`probe_targets` can be left empty: two built-in HTTPS checks are then used.
+If a profile is invalid, the add-on logs a generic error and keeps the existing
+VLESS exit running. The old detailed `awg_exits` option still works, but do not
+fill both `awg_configs` and `awg_exits` at once.
+
+Alternatively, configure `awg_exits` in the add-on Configuration tab. Each list item is one
 AWG3 server and contains its own client `address`, `private_key`, peer keys,
 `endpoint`, and all AWG3 fields from its exported `[Interface]` and `[Peer]`
 configuration. Use distinct endpoints and priorities from 1 to 99; lower
@@ -15,7 +47,7 @@ Copy credentials into the Home Assistant options only; do not commit them to
 this repository. The router's existing WireGuard settings do not change.
 
 When `awg_exits` is empty, the add-on uses its previous VLESS-only behavior.
-When AWG exits are configured, add at least two `probe_targets`, for example:
+You can override the built-in checks with at least two `probe_targets`, for example:
 
 ```yaml
 probe_targets:

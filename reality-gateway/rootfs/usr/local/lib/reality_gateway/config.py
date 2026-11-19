@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import base64
 import binascii
+import configparser
 from ipaddress import ip_address, ip_interface
 import json
 from pathlib import Path
@@ -32,11 +33,58 @@ class GatewayConfig:
     legacy_mode: bool
 
 
+def parse_awg_text(text: str, index: int) -> dict:
+    """Convert a pasted Amnezia [Interface]/[Peer] profile into options."""
+    if not isinstance(text, str) or len(text) > 16384:
+        raise ValueError("invalid AWG profile text")
+    parser = configparser.ConfigParser(interpolation=None, strict=True)
+    try:
+        parser.read_string(text)
+        interface, peer = parser["Interface"], parser["Peer"]
+        fields = {
+            "address": interface["Address"],
+            "private_key": interface["PrivateKey"],
+            "peer_public_key": peer["PublicKey"],
+            "preshared_key": peer["PresharedKey"],
+            "endpoint": peer["Endpoint"],
+            "header_protection_key": interface["HeaderProtectionKey"],
+        }
+        for field in ("jc", "jmin", "jmax", "s1", "s2", "s3", "s4", "h1", "h2", "h3", "h4"):
+            fields[field] = interface.getint(field)
+        for field, source in (
+            ("content_padding_addition", "ContentPaddingAddition"),
+            ("rekey_after_time", "RekeyAfterTime"),
+            ("rekey_timeout", "RekeyTimeout"),
+            ("reject_after_time", "RejectAfterTime"),
+            ("keepalive_timeout", "KeepaliveTimeout"),
+            ("max_handshake_attempts", "MaxHandshakeAttempts"),
+        ):
+            fields[field] = interface[source]
+        for field, source in (("random_trailers", "RandomTrailers"),
+                              ("disable_cookies", "DisableCookies")):
+            value = interface[source].lower()
+            if value not in ("on", "off"):
+                raise ValueError("invalid AWG boolean")
+            fields[field] = value == "on"
+        fields["persistent_keepalive"] = peer.get("PersistentKeepalive", "25")
+    except (configparser.Error, KeyError, ValueError) as exc:
+        raise ValueError(f"invalid AWG profile #{index}: expected complete [Interface] and [Peer] blocks") from exc
+    fields.update(id=f"exit{index}", priority=index)
+    return fields
+
+
 def load_config(options_path: Path) -> GatewayConfig:
     options = json.loads(options_path.read_text(encoding="utf-8"))
     raw_exits = options.get("awg_exits") or []
     if not isinstance(raw_exits, list):
         raise ValueError("awg_exits must be a list")
+    raw_profiles = options.get("awg_configs") or []
+    if not isinstance(raw_profiles, list):
+        raise ValueError("awg_configs must be a list")
+    if raw_exits and raw_profiles:
+        raise ValueError("use either awg_configs or awg_exits")
+    if raw_profiles:
+        raw_exits = [parse_awg_text(profile, index) for index, profile in enumerate(raw_profiles, 1)]
     if not raw_exits:
         return GatewayConfig((ExitSpec("vless", "vless", 100),), (), True)
     exits = []
@@ -87,7 +135,10 @@ def load_config(options_path: Path) -> GatewayConfig:
             raise ValueError("AWG3 header protection requires S1-S4 >= 12")
         ids.add(name); priorities.add(priority); addresses.add(address); endpoints.add(endpoint)
         exits.append(ExitSpec(name, "awg3", priority, item))
-    raw_probes = options.get("probe_targets") or []
+    raw_probes = options.get("probe_targets") or [
+        {"host": "one.one.one.one", "ip": "1.1.1.1", "path": "/cdn-cgi/trace", "expected_status": 200},
+        {"host": "dns.google", "ip": "8.8.8.8", "path": "/resolve?name=example.com&type=A", "expected_status": 200},
+    ]
     if len(raw_probes) < 2:
         raise ValueError("at least two probe targets required")
     probes = []

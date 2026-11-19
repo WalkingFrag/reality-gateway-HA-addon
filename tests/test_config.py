@@ -56,6 +56,37 @@ class ConfigTests(unittest.TestCase):
                 {"host": "two.example", "ip": "192.0.2.2", "path": "/", "expected_status": 200},
             ]})
 
+    def test_pasted_profile_uses_list_order_and_default_probes(self):
+        entry = self.awg()
+        interface = ["[Interface]", f"Address = {entry['address']}", "DNS = 1.1.1.1"]
+        peer = ["[Peer]", f"PublicKey = {entry['peer_public_key']}",
+                f"PresharedKey = {entry['preshared_key']}",
+                "AllowedIPs = 0.0.0.0/0, ::/0", f"Endpoint = {entry['endpoint']}",
+                f"PersistentKeepalive = {entry['persistent_keepalive']}"]
+        keys = {
+            "private_key": "PrivateKey", "header_protection_key": "HeaderProtectionKey",
+            "content_padding_addition": "ContentPaddingAddition", "rekey_after_time": "RekeyAfterTime",
+            "rekey_timeout": "RekeyTimeout", "reject_after_time": "RejectAfterTime",
+            "keepalive_timeout": "KeepaliveTimeout", "max_handshake_attempts": "MaxHandshakeAttempts",
+        }
+        for source, name in keys.items():
+            interface.append(f"{name} = {entry[source]}")
+        for name in ("jc", "jmin", "jmax", "s1", "s2", "s3", "s4", "h1", "h2", "h3", "h4"):
+            interface.append(f"{name.upper()} = {entry[name]}")
+        interface.extend(["RandomTrailers = on", "DisableCookies = on"])
+        profile = "\n".join(interface + [""] + peer)
+        config = self.load({"awg_configs": [profile]})
+        self.assertFalse(config.legacy_mode)
+        self.assertEqual(config.exits[0].id, "exit1")
+        self.assertEqual(config.exits[0].priority, 1)
+        self.assertEqual(config.exits[0].awg_settings["endpoint"], entry["endpoint"])
+        self.assertEqual(len(config.probes), 2)
+
+    def test_bad_pasted_profile_is_rejected_without_its_contents_in_error(self):
+        with self.assertRaises(ValueError) as caught:
+            self.load({"awg_configs": ["[Interface]\nPrivateKey = secret"]})
+        self.assertNotIn("secret", str(caught.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

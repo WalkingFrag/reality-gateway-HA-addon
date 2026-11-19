@@ -76,7 +76,11 @@ class GatewayController:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s: %(message)s")
-    config = load_config(Path("/data/options.json"))
+    try:
+        config = load_config(Path("/data/options.json"))
+    except (ValueError, TypeError, KeyError, AttributeError):
+        logging.error("AWG options invalid; continuing with existing VLESS exit")
+        config = GatewayConfig((ExitSpec("vless", "vless", 100),), (), True)
     network = NetworkManager()
     awg = AwgManager()
     network.reconcile(config.exits)

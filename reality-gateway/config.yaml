@@ -1,5 +1,5 @@
 name: "Reality Gateway"
-version: "0.2.0"
+version: "0.2.1"
 slug: reality_gateway
 description: "WireGuard gateway with AWG3 and VLESS egress failover"
 url: "https://github.com/WalkingFrag/reality-gateway-HA-addon"
@@ -25,6 +25,7 @@ options:
   wg_server_address: 10.20.30.1/24
   wg_peer_allowed_ip: 10.20.30.2/32
   awg_exits: []
+  awg_configs: []
   probe_targets: []
 schema:
   vless_server: str
@@ -66,6 +67,8 @@ schema:
       random_trailers: bool
       disable_cookies: bool
       persistent_keepalive: str
+  awg_configs:
+    - str
   probe_targets:
     - host: str
       ip: str

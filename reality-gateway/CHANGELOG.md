@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Added `awg_configs`: paste each complete AWG3 text profile in one YAML field; list order controls priority.
+- Added two default HTTPS probe targets, so AWG profiles no longer require separate probe fields.
+- Invalid AWG options now leave the existing VLESS route running instead of stopping the routing service.
+
 ## 0.2.0
 
 - Added multiple AmneziaWG 3.1 IPv4 exit servers configured in the add-on options.
