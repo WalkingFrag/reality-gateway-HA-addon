@@ -62,7 +62,7 @@ def load_config(options_path: Path) -> GatewayConfig:
             value = item.get(field, "")
             try:
                 decoded = base64.b64decode(value, validate=True)
-        except (binascii.Error, ValueError, TypeError) as exc:
+            except (binascii.Error, ValueError, TypeError) as exc:
                 raise ValueError(f"invalid {field}") from exc
             if len(decoded) != 32:
                 raise ValueError(f"invalid {field}")
