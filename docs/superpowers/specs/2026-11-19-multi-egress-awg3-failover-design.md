@@ -1,6 +1,6 @@
 # Reality Gateway: multiple AWG3 exits with VLESS failover
 
-Date: 2026-11-19. Status: proposed design for review; no runtime changes.
+Date: 2026-11-19. Status: approved by user; no runtime changes yet.
 
 ## Intent
 
@@ -83,7 +83,8 @@ selected LAN client -> Keenetic Wireguard2 -> HA wg0 (10.20.30.1)
 
 - An interface existing or an AWG handshake is only a preliminary signal.
   A candidate is healthy after real HTTPS requests through that specific
-  exit succeed against independently hosted, configurable probe targets.
+  exit succeed against at least one of two independently hosted,
+  configurable probe targets.
   Validate the expected response and TLS certificate. The probe must be
   bound to that candidate's routing table; a response via the HA WAN must
   never count as success.
