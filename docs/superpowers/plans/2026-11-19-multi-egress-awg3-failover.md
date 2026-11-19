@@ -13,9 +13,9 @@
 ## Global Constraints
 
 - Existing WireGuard keys in `/data/wg-keys.env`, `wg0` peer settings, and existing VLESS options survive an upgrade.
-- No `egress.json` means the current VLESS-only behavior and first-run router key handoff remain usable.
-- AWG3 private keys and VLESS secrets never enter git or logs; reject config paths outside the app configuration directory.
-- The two supplied `vpn://` keys are not native AWG configs. Provision a separate HA client on each self-hosted server and export AWG 3.1 `.conf` files; do not store share links in the add-on.
+- No AWG3 exit list means the current VLESS-only behavior and first-run router key handoff remain usable.
+- AWG3 private keys and VLESS secrets never enter git or logs; validate all option values before changing routes.
+- The supplied AWG 3.1 configs are two peers on one endpoint. Provision a separate HA client on each distinct server; enter server and peer fields in the add-on Configuration tab, not files in the repository.
 - The release routes selected IPv4 traffic only. The Keenetic must disable or block selected IPv6 traffic before cutover.
 - No host default route changes, HAOS kernel modules, standalone containers, or router credentials.
 - The production route is table 100 with mark 100. A less preferred blackhole route must remain after a selected interface disappears.
@@ -25,7 +25,7 @@
 
 ## Review Focus
 
-- An AWG config with `../` or a symlink must be rejected before any shell/network action (Task 1 test).
+- Invalid or incomplete AWG option values must be rejected before any shell/network action (Task 1 test).
 - Deleting a selected TUN interface must leave table 100's blackhole and never route marked traffic via the main table (Task 3 test).
 - Probe success over the HA WAN must not mark an exit healthy (Task 4 test).
 - Failed AWG process startup must leave VLESS eligible and the inbound `wg0` running (Task 5 test).
@@ -34,7 +34,7 @@
 ## File map
 
 - `reality-gateway/Dockerfile`: install Python and build pinned AWG userspace binaries per advertised architecture.
-- `reality-gateway/config.yaml`: add the `app_config` mapping, keep old options, bump version only for a tested release.
+- `reality-gateway/config.yaml`: add nested AWG3 exit options with password fields for secrets, keep old VLESS options, bump version only for a tested release.
 - `reality-gateway/rootfs/etc/cont-init.d/10-setup.sh`: preserve WG and sing-box setup, move policy-route ownership out of the legacy service.
 - `reality-gateway/rootfs/etc/services.d/routing/run`: replace the unconditional VLESS route loop with the controller entrypoint.
 - `reality-gateway/rootfs/usr/local/lib/reality_gateway/config.py`: parse and validate exit and probe configuration.
@@ -49,13 +49,13 @@
 
 ### Task 1: Configuration and migration
 
-**Files:** Create `config.py`, `tests/test_config.py`; modify `reality-gateway/config.yaml` for `app_config`.
+**Files:** Create `config.py`, `tests/test_config.py`; modify `reality-gateway/config.yaml` for nested exit options.
 
-**Interfaces:** `load_config(options_path: Path, app_config: Path) -> GatewayConfig`; `GatewayConfig.exits` is an ordered tuple of `ExitSpec(id, kind, priority, awg_config_path)` and `GatewayConfig.probes` is a tuple of `ProbeTarget(host, ip, path, expected_status)`. Absent `egress.json` yields one VLESS exit and `legacy_mode=True`.
+**Interfaces:** `load_config(options_path: Path) -> GatewayConfig`; `GatewayConfig.exits` is an ordered tuple of `ExitSpec(id, kind, priority, awg_settings)` and `GatewayConfig.probes` is a tuple of `ProbeTarget(host, ip, path, expected_status)`. Absent exit list yields one VLESS exit and `legacy_mode=True`.
 
-- [ ] Write tests for absent config, two AWG3 exits plus VLESS, duplicate IDs/priorities, fewer than two probe targets, malformed IPs, a `vpn://` string mistakenly used as `.conf`, out-of-tree paths, and symlinks. Add `rootfs/usr/local/lib` to the test import path.
+- [ ] Write tests for absent exit list, two AWG3 exits plus VLESS, duplicate IDs/priorities, fewer than two probe targets, malformed IPs, missing keys, and malformed endpoint. Add `rootfs/usr/local/lib` to the test import path.
 - [ ] Run `python -m unittest discover -s tests -p 'test_config.py' -v`; confirm the new tests fail.
-- [ ] Implement strict JSON parsing and AWG `.conf` validation without evaluating `PostUp`/`PostDown` or any shell content. Require unique tunnel addresses and safe interface names derived from IDs.
+- [ ] Implement strict Supervisor option parsing and AWG settings validation. Require unique tunnel addresses and safe interface names derived from IDs.
 - [ ] Rerun the focused tests and confirm pass; commit Task 1.
 
 ### Task 2: Pinned AWG3 binaries and process lifecycle
@@ -105,9 +105,9 @@
 
 **Files:** Modify `reality-gateway/README.md`, `CHANGELOG.md`, and `config.yaml` version; create `tests/integration/` harness where useful.
 
-**Interfaces:** Example `egress.json` and AWG client `.conf` documentation use placeholders only. Document router IPv6 blocking, probe targets, port/endpoint reachability, key handling, and rollback to the previous add-on.
+**Interfaces:** Example add-on options use placeholders only. Document router IPv6 blocking, probe targets, port/endpoint reachability, key handling, and rollback to the previous add-on.
 
 - [ ] Run the complete unit suite, shell syntax checks, `sing-box check`, and image builds for supported architectures. Test forwarded packets and exit loss in a disposable Linux/HAOS test environment.
 - [ ] Document configuration, migration, router IPv6 policy, and rollback. Bump the app version and commit a candidate release after local checks pass.
-- [ ] With live rollout authorization, create dedicated HA clients on both VPSs and export AWG 3.1 native `.conf` files from AmneziaVPN. Install the candidate on the HAOS/aarch64 target. Verify the old config still routes via VLESS, then configure one AWG3 server and a second. Confirm actual Keenetic-forwarded traffic exits through each selected VPS and not merely a local curl.
+- [ ] With live rollout authorization, create dedicated HA clients on both VPSs, enter their AWG 3.1 parameters in the add-on Configuration tab, and install the candidate on the HAOS/aarch64 target. Verify the old config still routes via VLESS, then configure one AWG3 server and a second. Confirm actual Keenetic-forwarded traffic exits through each selected VPS and not merely a local curl.
 - [ ] Simulate each exit loss and recovery, total outage, add-on restart, and MTU-sized transfers. Confirm table 100 retains the blackhole and no selected IPv4 flow exits via HA WAN. Record the observed result and publish the tested release.

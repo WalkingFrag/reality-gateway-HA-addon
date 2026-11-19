@@ -59,22 +59,21 @@ selected LAN client -> Keenetic Wireguard2 -> HA wg0 (10.20.30.1)
 
 ## Configuration
 
-- Add an `app_config` mount. An `egress.json` file there lists exit IDs, type,
-  priority, and an AWG config filename for each AWG exit. A corresponding
-  `awg/<id>.conf` holds each client's private key, endpoint, tunnel address,
-  and AWG 3.1 parameters. Reject duplicate IDs, invalid paths, incomplete
-  configs, and overlapping tunnel addresses before changing host routes.
-- Keep existing VLESS fields in Supervisor options. `egress.json` can refer to
+- Configure exits in the add-on's Home Assistant Configuration tab as a nested
+  list. Each AWG3 entry includes its name, priority, endpoint, tunnel address,
+  peer public key, client private key, preshared key, and AWG 3.1 parameters.
+  The private and preshared keys use password fields. Reject duplicate IDs,
+  incomplete configs, and overlapping tunnel addresses before changing routes.
+- Keep existing VLESS fields in Supervisor options. The exit list can refer to
   the existing VLESS exit by ID without repeating its credentials. No private
   AWG3 keys, UUIDs, short IDs, or complete AWG3 client configs enter the
-  repository or the add-on log. User-provided files must have restrictive
-  permissions. Preserve the current one-time WireGuard router-key log on a
+  repository or the add-on log. Preserve the current one-time WireGuard router-key log on a
   fresh install so existing onboarding continues to work; it is not repeated
   after the keys are saved in `/data`.
-- If `egress.json` is absent, retain the current VLESS-only behavior. This
+- If the exit list is absent, retain the current VLESS-only behavior. This
   provides a migration path for existing installations. Initial configured
   preference is AWG3 exits in ascending priority, then VLESS; the user can
-  reorder them in the file.
+  reorder them in the add-on configuration.
 - Exact option and file format will be validated against Supervisor's current
   app configuration rules during implementation. The Home Assistant app
   configuration folder is backed up with the app.
@@ -125,12 +124,10 @@ selected LAN client -> Keenetic Wireguard2 -> HA wg0 (10.20.30.1)
   project does not create remote VPS services. A 3.1 client config must match
   the server's 3.1 parameters. The builder will verify upstream Go/tools
   versions and build support for each advertised architecture before release.
-- The two supplied `vpn://` connection keys are inputs to the AmneziaVPN app,
-  not AWG native client files. For each self-hosted server, create a separate
-  client for this HA gateway and export `AmneziaWG native format` as `.conf`.
-  Confirm the exported protocol is AWG 3.1. Do not store the share links in
-  the add-on options or repository, and do not reuse a client config already
-  active on another device.
+- The two supplied native AWG 3.1 configs identify two client peers on the
+  same endpoint. They do not provide server redundancy. Provision a separate
+  HA client on each distinct server and enter its values in the add-on options.
+  Do not store share links or client configs in the repository.
 
 ## Explicit limits
 
