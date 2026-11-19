@@ -1,185 +1,62 @@
 # Reality Gateway
 
-## Панель состояния (версия 0.3.1)
+Аддон Home Assistant для маршрутизации трафика Keenetic через несколько выходных туннелей: AmneziaWG 3.1 и VLESS + Reality.
 
-После запуска откройте **Reality Gateway** в боковом меню Home Assistant
-или нажмите **Open Web UI** на странице аддона.
-Панель показывает выбранный выход, результат проверки каждого AWG/VLESS,
-наличие маршрута в таблице 100, а также handshake и счётчики трафика
-WireGuard-соединения с роутером. Отсутствие свежего handshake при простое
-не обязательно означает обрыв. В режиме только одного старого VLESS
-маршрут виден, но доступность сервера не проверяется.
+## Возможности
 
-В панели также можно добавить выходной AmneziaWG 3.1 сервер: задайте имя и
-вставьте полный текстовый профиль с блоками `[Interface]` и `[Peer]`.
-Профиль проходит ту же строгую проверку, что `awg_configs`; повторяющиеся
-адреса и endpoints отклоняются до сохранения. Профили хранятся с правами
-`0600` в `/data/awg-profiles.json`, а ключи не возвращаются через API.
-Выходы, добавленные в панели, следуют после AWG из Configuration и перед
-VLESS. После изменения списка требуется перезапуск аддона.
+- Автоматически выбирает доступный выход с наивысшим приоритетом.
+- Показывает текущий туннель, доступность выходов и состояние WireGuard-соединения с роутером.
+- Позволяет вручную менять порядок туннелей в панели: первый доступный выход становится активным, остальные задают порядок переключения.
+- Поддерживает несколько AWG3-профилей и до 20 дополнительных VLESS-ссылок.
 
-В панели можно добавить до 20 дополнительных VLESS+Reality серверов:
-вставьте полную `vless://` ссылку с `security=reality`, `pbk`, `sni` и
-именем после `#`. Поддерживаются TCP и flow `xtls-rprx-vision`.
-Ссылки сохраняются с правами доступа `0600` в `/data/vless-exits.json`.
-Панель не возвращает UUID, Reality short ID или ссылку через API.
-Дополнительные VLESS проверяются отдельно, в порядке добавления,
-после AWG3 и до основного VLESS. После добавления или удаления
-**перезапустите аддон** на странице Home Assistant; панель покажет
-напоминание. Старые поля основного VLESS и ключи WireGuard продолжают
-работать без миграции.
+## Установка
 
-Веб-панель доступна только через Home Assistant ingress. Прямой доступ
-к порту 8099 с локальной сети отклоняется.
+1. В Home Assistant откройте **Настройки → Дополнения → Магазин дополнений → ⋮ → Репозитории** и добавьте URL этого GitHub-репозитория.
+2. Установите **Reality Gateway**.
+3. В разделе конфигурации аддона задайте `vless_server`, `vless_uuid` и `vless_reality_short_id`. Эти обязательные значения берутся из настроек вашего VLESS-сервера и не включены в репозиторий.
+4. Запустите аддон и настройте WireGuard-подключение Keenetic по значениям из журнала первого запуска.
 
-Version 0.3.1 supports multiple AmneziaWG 3.1 (AWG3) and VLESS+Reality
-exit servers. Keenetic still connects to this add-on's
-`wg0` over ordinary WireGuard. The add-on routes the selected IPv4 traffic
-through one healthy exit at a time.
+После запуска откройте панель **Reality Gateway** из бокового меню Home Assistant или нажмите **Open Web UI** на странице аддона. Панель работает через Home Assistant ingress; порт 8099 напрямую из локальной сети недоступен.
 
-For the simple setup, open the add-on Configuration tab, switch to YAML mode,
-and paste each complete AmneziaWG text profile under `awg_configs`:
+## Добавление выходов
+
+### AmneziaWG 3.1
+
+В панели укажите имя и вставьте полный текстовый профиль с секциями `[Interface]` и `[Peer]`. Также профили можно задать в конфигурации аддона через `awg_configs` — каждый элемент списка содержит полный профиль:
 
 ```yaml
 awg_configs:
   - |
     [Interface]
     Address = 10.8.1.12/32
-    PrivateKey = <your client private key>
-    ...
+    PrivateKey = <client private key>
+    # остальные параметры профиля
     [Peer]
     PublicKey = <server public key>
-    Endpoint = <server IPv4>:<port>
-    ...
-  - |
-    [Interface]
-    ...
-    [Peer]
-    ...
+    Endpoint = <server address>:<port>
+    # остальные параметры профиля
 ```
 
-Paste the full exported `[Interface]` and `[Peer]` blocks, including all AWG3
-parameters, in place of the shortened example. The first profile is preferred,
-the second is backup, and VLESS is last. Raw `vpn://` share links are not
-accepted here; export the text profile from Amnezia first. Keep the profiles
-in Home Assistant options only, never in a GitHub commit.
+Не вставляйте в GitHub реальные профили, приватные ключи или PSK. Используйте либо `awg_configs`, либо расширенный список `awg_exits`, но не оба сразу. Изменения профилей требуют перезапуска аддона; панель покажет напоминание.
 
-`probe_targets` can be left empty: two built-in HTTPS checks are then used.
-If a profile is invalid, the add-on logs a generic error and keeps the existing
-VLESS exit running. The old detailed `awg_exits` option still works, but do not
-fill both `awg_configs` and `awg_exits` at once.
+### VLESS + Reality
 
-Alternatively, configure `awg_exits` in the add-on Configuration tab. Each list item is one
-AWG3 server and contains its own client `address`, `private_key`, peer keys,
-`endpoint`, and all AWG3 fields from its exported `[Interface]` and `[Peer]`
-configuration. Use distinct endpoints and priorities from 1 to 99; lower
-numbers are preferred. Enter `random_trailers` and `disable_cookies` as
-booleans (`true`/`false`), and keep range values such as `10-100` as strings.
-Copy credentials into the Home Assistant options only; do not commit them to
-this repository. The router's existing WireGuard settings do not change.
+В панели можно добавить до 20 дополнительных серверов, вставив полную ссылку `vless://` с параметрами Reality. Поддерживаются TCP и flow `xtls-rprx-vision`. После добавления или удаления сервера перезапустите аддон, если панель показывает такое требование.
 
-When no AWG or additional VLESS exits are configured, the add-on uses its
-previous VLESS-only behavior.
-You can override the built-in checks with at least two `probe_targets`, for example:
+Профили и ссылки хранятся в данных аддона. Ключи не возвращаются через панельный API. Не публикуйте их в репозитории или журналах.
 
-```yaml
-probe_targets:
-  - host: www.cloudflare.com
-    ip: 104.16.123.96
-    path: /cdn-cgi/trace
-    expected_status: 200
-  - host: www.google.com
-    ip: 142.250.191.100
-    path: /generate_204
-    expected_status: 204
-```
+## Приоритет и переключение
 
-Use IPv4 addresses that currently serve the specified HTTPS host and path;
-verify them before entering them, since providers can change addresses.
-Each probe is forced through its own candidate exit. An exit becomes healthy
-after three successful rounds and unhealthy after three failed rounds. The
-controller checks every 15 seconds and waits at least two minutes before
-switching back to a higher-priority exit. When all exits fail, traffic from
-`wg0` is blocked. Existing connections may break when the exit changes.
+Перетаскивайте строки списка туннелей, чтобы менять их порядок. Верхний доступный туннель используется сейчас; остальные идут по порядку приоритета. Если выход становится недоступен, аддон переключается на следующий доступный. Изменение порядка применяется без перезапуска.
 
-IPv6 exit traffic is not supported in this release. Block IPv6 for the
-selected router traffic so it cannot bypass this IPv4-only gateway.
+Проверки доступности выполняются через HTTPS. Состояние handshake WireGuard с роутером и счётчики трафика отображаются отдельно: отсутствие свежего handshake при простое само по себе не означает обрыв.
 
-VLESS+Reality VPN fallback gateway for Home Assistant OS. Packages a
-WireGuard server (`wg0`) and a sing-box TUN client (`tun-reality`) that
-forwards WireGuard traffic out over a VLESS+Reality connection, for use
-when the primary VPN egress is unavailable.
+## Ограничения
 
-See `docs/superpowers/specs/2026-09-11-reality-gateway-addon-design.md`
-in this repository for the full design and the router-side manual setup
-this add-on assumes.
+- Выбранный трафик маршрутизируется по IPv4. IPv6 через выходные туннели не поддерживается; настройте его блокировку или отключение на Keenetic для выбранного трафика.
+- Keenetic настраивается отдельно. Аддон не хранит данные доступа к роутеру и не меняет его маршруты автоматически.
+- Аддон использует сетевое пространство Home Assistant и меняет правила маршрутизации хоста. После остановки аддона часть интерфейсов и правил может сохраняться до перезагрузки хоста.
 
-## Installation
+## Обновление
 
-1. In Home Assistant: Settings → Add-ons → Add-on Store → ⋮ → Repositories → add this repo's git URL.
-2. Install "Reality Gateway" from the store.
-3. Configure the options. `vless_server`, `vless_uuid`, and `vless_reality_short_id` have no default and are **required** — get these from your VLESS+Reality exit server's own config (they identify and authenticate against that specific server, so they're deliberately not shipped as defaults in this public repo). The rest default to already-verified values; only change them if you need different WireGuard addressing or a different Reality SNI.
-4. Start the add-on. Check the log for the one-time router-side WireGuard values (router private key, router public key, PSK, suggested AllowedIPs) and enter them into the Keenetic router's `Wireguard2` interface manually.
-
-## Configuration options
-
-| Option | Default | Description |
-|---|---|---|
-| `vless_server` | **required, no default** | VLESS+Reality exit server IP or hostname |
-| `vless_port` | `444` | VLESS+Reality exit server port |
-| `vless_uuid` | **required, no default** | Xray client UUID on the exit server — this is a credential, not a public value |
-| `vless_flow` | `xtls-rprx-vision` | XTLS flow control |
-| `vless_reality_public_key` | `QqAo_aC2hr-1ThVR-HFu4Vrn6mm4PKA4esLIhrgq42M` | Reality public key (this is the server's public key — safe to publish, unlike the UUID/short ID) |
-| `vless_reality_short_id` | **required, no default** | Reality short ID — part of Reality's anti-probing defense, treat as sensitive |
-| `vless_sni` | `www.googletagmanager.com` | Reality SNI camouflage domain |
-| `wg_listen_port` | `51821` | UDP port the add-on's WireGuard server listens on |
-| `wg_server_address` | `10.20.30.1/24` | `wg0`'s address on the add-on side |
-| `wg_peer_allowed_ip` | `10.20.30.2/32` | The router's address inside the WireGuard tunnel |
-
-WireGuard key material is **not** an option — it's generated once on
-first start and persisted in `/data`, surviving add-on updates and
-restarts (only cleared by an explicit uninstall).
-
-## Updating
-
-1. Edit code in this repo.
-2. Bump `version` in `reality-gateway/config.yaml`.
-3. Commit and push.
-4. In Home Assistant: Settings → Add-ons → Add-on Store → this add-on shows an update → click Update (Supervisor rebuilds the image locally on the HA host).
-
-## Host network state
-
-This add-on modifies **host** network state directly, not just container
-state:
-
-- `wg0` and the policy routing rules (mangle mark, `ip rule`, `ip route`,
-  `DOCKER-USER` accepts) all live in the Home Assistant host's network
-  namespace, because the add-on runs with `host_network: true`. Stopping
-  the add-on does **not** revert any of this — `wg0`, the iptables rules,
-  and the `ip rule`/table 100 entries all persist until the host reboots
-  or they're removed manually. A full uninstall/teardown flow that cleans
-  this up automatically is deferred to a future release.
-- The policy routing uses a hardcoded firewall mark and routing table:
-  `fwmark 100` / `table 100`. These are not configurable. If anything else
-  on the Home Assistant host ever uses table 100 for its own routing, it
-  will silently collide with this add-on's rules — worth checking before
-  adding other policy routing on the same host.
-- During any window where the sing-box tunnel (`tun-reality`) isn't up yet
-  (add-on starting) or has gone away (add-on stopped or crashed) while the
-  `wg0` mangle rule and `ip rule fwmark 100 table 100` are still in place,
-  the routing service seeds a `blackhole` default route in table 100 as a
-  safety floor. This makes WireGuard traffic get dropped instead of
-  leaking out the host's normal WAN in the clear — but it only closes that
-  traffic-leak window; it does not remove the interface or rules
-  themselves (see the point above).
-- `wg_listen_port` is bound directly on the Home Assistant host (again
-  because of `host_network: true`), not inside an isolated container
-  network — it must be reachable from the router at the host's IP.
-
-## Out of scope
-
-The Keenetic router side (creating the `Wireguard2` interface, setting
-`ip.global`, and flipping the `dns-proxy route` domain-list entry) stays
-a manual step — this add-on never holds router admin credentials. See
-`docs/superpowers/specs/2026-09-11-reality-gateway-addon-design.md` for
-the full background.
+Обновление публикуется после изменения версии в `config.yaml` и отправки коммита в GitHub. Затем в Home Assistant обновите список репозиториев и нажмите **Обновить** на странице Reality Gateway.

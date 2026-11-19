@@ -2,107 +2,47 @@
 
 ## 0.3.2
 
-- Reorder tunnels by dragging rows or using the arrow buttons. The gateway
-  applies the saved priority without a restart and selects the first
-  available tunnel when the order changes.
+- Добавлена смена активного туннеля и приоритета перетаскиванием строк или кнопками.
+- Порядок применяется без перезапуска аддона.
 
 ## 0.3.1
 
-- Accept AWG profiles that Supervisor stored as a single line by restoring
-  known field boundaries before parsing. Existing profiles no longer block
-  adding a new AWG exit through the panel.
-- Show a specific, sanitized validation reason for common AWG errors.
+- Исправлено добавление AWG-профилей, сохранённых Home Assistant в одну строку.
+- Улучшены сообщения о типичных ошибках профиля без показа секретных значений.
 
 ## 0.3.0
 
-- Added a Home Assistant ingress panel with the current exit, per-exit health,
-  policy-route confirmation and the router's WireGuard handshake/traffic state.
-- Added management of multiple VLESS+Reality exits by pasting share links.
-  Each exit has its own sing-box TUN and independent health probe; changes
-  take effect after an add-on restart.
-- Added AWG3 profile management to the ingress panel. Profiles are validated
-  against existing AWG exits before saving and take effect after restart.
-- Preserved the existing VLESS options and WireGuard keys on upgrade.
-- Reconcile the selected route after a TUN restart, even when the selected
-  exit ID has not changed.
+- Добавлена панель Home Assistant с текущим выходом, проверками доступности и состоянием WireGuard-соединения с роутером.
+- Добавлено управление несколькими VLESS + Reality серверами и профилями AWG3.
+- Сохранена совместимость с существующими настройками VLESS и ключами WireGuard.
 
 ## 0.2.1
 
-- Added `awg_configs`: paste each complete AWG3 text profile in one YAML field; list order controls priority.
-- Added two default HTTPS probe targets, so AWG profiles no longer require separate probe fields.
-- Invalid AWG options now leave the existing VLESS route running instead of stopping the routing service.
+- Добавлена настройка AWG3 через полные текстовые профили в `awg_configs`.
+- Добавлены встроенные HTTPS-проверки; некорректный профиль не останавливает текущий маршрут.
 
 ## 0.2.0
 
-- Added multiple AmneziaWG 3.1 IPv4 exit servers configured in the add-on options.
-- Added marked HTTPS health checks, priority-based failover and delayed failback to VLESS+Reality.
-- Kept the existing router-to-Home Assistant WireGuard connection and VLESS-only configuration compatible.
-- Added a blackhole route for each candidate probe and the selected egress, so unavailable exits do not fall through to the host's normal route.
-- Added userspace AmneziaWG binaries and per-exit NAT and forwarding rules.
+- Добавлены несколько AWG3-выходов, проверки доступности, приоритетное переключение и возврат на VLESS.
+- Добавлена защита от отправки выбранного трафика через обычный WAN при отказе туннеля.
 
 ## 0.1.4
 
-- **Fixed:** real page loads (e.g. bbc.com) hung indefinitely even though
-  the tunnel otherwise looked healthy. Root cause: the sing-box
-  `tun-reality` inbound had `"mtu": 9000`, far larger than the real
-  WireGuard path's ~1420 MTU — small packets (DNS, TLS handshake) fit and
-  looked fine, but real page payloads hit an MTU black hole (PMTU-discovery
-  ICMP correction is commonly lost across NAT+tunnel paths like this one,
-  so it failed silently instead of erroring). `mtu` is now `1400`.
-- **Added:** a `TCPMSS --clamp-mss-to-pmtu` rule on the `FORWARD` chain for
-  `tun-reality`-bound traffic, so if the tun MTU and the real WireGuard MTU
-  ever drift apart again, TCP connections degrade gracefully instead of
-  silently black-holing.
+- Исправлены зависания крупных сетевых запросов настройкой MTU и TCP MSS.
 
 ## 0.1.3
 
-- Fixed: the three required options introduced in 0.1.2 (`vless_server`,
-  `vless_uuid`, `vless_reality_short_id`) were omitted from `options:`
-  entirely, which is the syntax for a truly *optional* field (paired with
-  `str?` in `schema:`), not a required one — the Supervisor Configuration UI
-  didn't render fields for them at all. Required-with-no-default in an HA
-  add-on means the key stays in `schema:` as plain `str` (no `?`) **and**
-  is present in `options:` with value `null`. Fixed to that pattern.
+- Исправлено отображение обязательных полей VLESS в конфигурации аддона.
 
 ## 0.1.2
 
-- **Security fix:** `vless_server`, `vless_uuid`, and `vless_reality_short_id`
-  were shipped as real, working default values in `config.yaml` — the UUID
-  and short ID are credentials/anti-probing values, not public data, and
-  ended up briefly exposed in this repo's history. They now have no default
-  and must be entered manually as required options. The exposed UUID has
-  been rotated on the exit server; the leaked values were also scrubbed from
-  this repo's git history.
+- Удалены реальные учётные данные из значений по умолчанию. Если вы используете старую версию, смените VLESS-реквизиты.
 
 ## 0.1.1
 
-- Fixed: `sysctl -w net.ipv4.ip_forward=1` fails under this add-on's actual
-  privilege level (`NET_ADMIN` capability, not full `--privileged`), which
-  previously aborted the routing service before any policy routing rule was
-  applied — the add-on would show as running while zero traffic actually
-  flowed. The write is now best-effort with a clear warning if forwarding
-  isn't already enabled on the host.
-- Fixed: `wg0`'s IP address was only applied the first time the interface
-  was created, so changing `wg_server_address` and restarting silently kept
-  the old address (since `wg0` lives in the host network namespace and
-  survives restarts). The address is now flushed and reapplied on every run.
-- Fixed: the router-side WireGuard private key and preshared key were
-  re-logged into Home Assistant's persisted logs on every restart/update,
-  not just on first generation. Full secret values are now logged only on
-  the run that actually generates them.
-- Added: a fail-closed `blackhole` default route seeded in the policy
-  routing table before/while waiting for the sing-box tunnel, so any window
-  without a live tunnel drops WireGuard traffic instead of leaking it out
-  the host's normal WAN.
-- Added: the rendered sing-box config is now validated with `sing-box check`
-  at init time, failing loudly on bad VLESS/Reality option values instead of
-  leaving the add-on silently non-functional.
-- Minor robustness fix: the `ip rule` idempotency check now captures
-  `ip rule show` to a variable before grepping it, avoiding a theoretical
-  `pipefail`/SIGPIPE race that could cause a spurious duplicate rule add.
-- Fixed the placeholder repository URL and added a documentation link to
-  the add-on store listing.
+- Исправлены настройка IP-адреса `wg0`, пересылка трафика и повторное появление ключей в журнале.
+- Добавлена проверка конфигурации sing-box перед запуском.
 
 ## 0.1.0
 
-- Initial release: WireGuard server + sing-box VLESS+Reality TUN client, packaged as a Home Assistant add-on.
+- Первый выпуск: WireGuard-сервер и клиент sing-box VLESS + Reality для Home Assistant.
