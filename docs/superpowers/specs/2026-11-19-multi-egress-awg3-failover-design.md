@@ -125,6 +125,12 @@ selected LAN client -> Keenetic Wireguard2 -> HA wg0 (10.20.30.1)
   project does not create remote VPS services. A 3.1 client config must match
   the server's 3.1 parameters. The builder will verify upstream Go/tools
   versions and build support for each advertised architecture before release.
+- The two supplied `vpn://` connection keys are inputs to the AmneziaVPN app,
+  not AWG native client files. For each self-hosted server, create a separate
+  client for this HA gateway and export `AmneziaWG native format` as `.conf`.
+  Confirm the exported protocol is AWG 3.1. Do not store the share links in
+  the add-on options or repository, and do not reuse a client config already
+  active on another device.
 
 ## Explicit limits
 
@@ -145,3 +151,4 @@ selected LAN client -> Keenetic Wireguard2 -> HA wg0 (10.20.30.1)
 - AWG3.1 protocol and client: https://docs.amnezia.org/documentation/amnezia-wg/
   and https://docs.amnezia.org/documentation/instructions/install-amneziawg-go/
 - HA app configuration folders: https://contributors.home-assistant.io/apps/guides/options/
+- Official self-hosted AWG native export: https://docs.amnezia.org/documentation/instructions/use-amneziawg-app/

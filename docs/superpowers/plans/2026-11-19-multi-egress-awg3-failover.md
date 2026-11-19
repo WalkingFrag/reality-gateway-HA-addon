@@ -15,6 +15,7 @@
 - Existing WireGuard keys in `/data/wg-keys.env`, `wg0` peer settings, and existing VLESS options survive an upgrade.
 - No `egress.json` means the current VLESS-only behavior and first-run router key handoff remain usable.
 - AWG3 private keys and VLESS secrets never enter git or logs; reject config paths outside the app configuration directory.
+- The two supplied `vpn://` keys are not native AWG configs. Provision a separate HA client on each self-hosted server and export AWG 3.1 `.conf` files; do not store share links in the add-on.
 - The release routes selected IPv4 traffic only. The Keenetic must disable or block selected IPv6 traffic before cutover.
 - No host default route changes, HAOS kernel modules, standalone containers, or router credentials.
 - The production route is table 100 with mark 100. A less preferred blackhole route must remain after a selected interface disappears.
@@ -52,7 +53,7 @@
 
 **Interfaces:** `load_config(options_path: Path, app_config: Path) -> GatewayConfig`; `GatewayConfig.exits` is an ordered tuple of `ExitSpec(id, kind, priority, awg_config_path)` and `GatewayConfig.probes` is a tuple of `ProbeTarget(host, ip, path, expected_status)`. Absent `egress.json` yields one VLESS exit and `legacy_mode=True`.
 
-- [ ] Write tests for absent config, two AWG3 exits plus VLESS, duplicate IDs/priorities, fewer than two probe targets, malformed IPs, out-of-tree paths, and symlinks. Add `rootfs/usr/local/lib` to the test import path.
+- [ ] Write tests for absent config, two AWG3 exits plus VLESS, duplicate IDs/priorities, fewer than two probe targets, malformed IPs, a `vpn://` string mistakenly used as `.conf`, out-of-tree paths, and symlinks. Add `rootfs/usr/local/lib` to the test import path.
 - [ ] Run `python -m unittest discover -s tests -p 'test_config.py' -v`; confirm the new tests fail.
 - [ ] Implement strict JSON parsing and AWG `.conf` validation without evaluating `PostUp`/`PostDown` or any shell content. Require unique tunnel addresses and safe interface names derived from IDs.
 - [ ] Rerun the focused tests and confirm pass; commit Task 1.
@@ -108,5 +109,5 @@
 
 - [ ] Run the complete unit suite, shell syntax checks, `sing-box check`, and image builds for supported architectures. Test forwarded packets and exit loss in a disposable Linux/HAOS test environment.
 - [ ] Document configuration, migration, router IPv6 policy, and rollback. Bump the app version and commit a candidate release after local checks pass.
-- [ ] With live rollout authorization, install the candidate on the HAOS/aarch64 target. Verify the old config still routes via VLESS, then configure one AWG3 server and a second. Confirm actual Keenetic-forwarded traffic exits through each selected VPS and not merely a local curl.
+- [ ] With live rollout authorization, create dedicated HA clients on both VPSs and export AWG 3.1 native `.conf` files from AmneziaVPN. Install the candidate on the HAOS/aarch64 target. Verify the old config still routes via VLESS, then configure one AWG3 server and a second. Confirm actual Keenetic-forwarded traffic exits through each selected VPS and not merely a local curl.
 - [ ] Simulate each exit loss and recovery, total outage, add-on restart, and MTU-sized transfers. Confirm table 100 retains the blackhole and no selected IPv4 flow exits via HA WAN. Record the observed result and publish the tested release.
