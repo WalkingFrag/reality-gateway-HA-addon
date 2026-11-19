@@ -37,10 +37,29 @@ class GatewayConfig:
     legacy_mode: bool
 
 
+_AWG_PROFILE_KEYS = (
+    "Address", "DNS", "MTU", "PrivateKey", "HeaderProtectionKey",
+    "Jc", "Jmin", "Jmax", "S1", "S2", "S3", "S4",
+    "H1", "H2", "H3", "H4", "ContentPaddingAddition",
+    "RekeyAfterTime", "RekeyTimeout", "RejectAfterTime",
+    "KeepaliveTimeout", "MaxHandshakeAttempts", "RandomTrailers",
+    "DisableCookies", "PublicKey", "PresharedKey", "AllowedIPs",
+    "Endpoint", "PersistentKeepalive",
+)
+_FLAT_AWG_BOUNDARY = re.compile(
+    r"\s+(?=(?:\[(?:Interface|Peer)\]|(?:" + "|".join(_AWG_PROFILE_KEYS) + r")\s*=))",
+    re.IGNORECASE,
+)
+
+
 def parse_awg_text(text: str, index: int) -> dict:
     """Convert a pasted Amnezia [Interface]/[Peer] profile into options."""
     if not isinstance(text, str) or len(text) > 16384:
         raise ValueError("invalid AWG profile text")
+    # Supervisor can collapse a YAML block scalar to one line. Recover only
+    # known section/field boundaries; never split key material or free text.
+    if "\n" not in text and "\r" not in text:
+        text = _FLAT_AWG_BOUNDARY.sub("\n", text)
     parser = configparser.ConfigParser(interpolation=None, strict=True)
     try:
         parser.read_string(text)
@@ -177,8 +196,14 @@ def load_config(options_path: Path, vless_path: Path = Path("/data/vless-exits.j
             raise ValueError("invalid AWG address") from exc
         if ip_interface(address).version != 4:
             raise ValueError("IPv4 AWG address required")
-        if name in ids or priority in priorities or address in addresses or endpoint in endpoints:
-            raise ValueError("duplicate id, priority, address, or endpoint")
+        if name in ids:
+            raise ValueError("duplicate AWG ID")
+        if priority in priorities:
+            raise ValueError("duplicate AWG priority")
+        if address in addresses:
+            raise ValueError("duplicate AWG address")
+        if endpoint in endpoints:
+            raise ValueError("duplicate AWG endpoint")
         for field in ("private_key", "peer_public_key", "preshared_key", "header_protection_key"):
             value = item.get(field, "")
             try:

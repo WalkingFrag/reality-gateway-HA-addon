@@ -1,6 +1,6 @@
 # Reality Gateway
 
-## Панель состояния (версия 0.3.0)
+## Панель состояния (версия 0.3.1)
 
 После запуска откройте **Reality Gateway** в боковом меню Home Assistant
 или нажмите **Open Web UI** на странице аддона.
@@ -32,7 +32,7 @@ VLESS. После изменения списка требуется перез�
 Веб-панель доступна только через Home Assistant ingress. Прямой доступ
 к порту 8099 с локальной сети отклоняется.
 
-Version 0.3.0 supports multiple AmneziaWG 3.1 (AWG3) and VLESS+Reality
+Version 0.3.1 supports multiple AmneziaWG 3.1 (AWG3) and VLESS+Reality
 exit servers. Keenetic still connects to this add-on's
 `wg0` over ordinary WireGuard. The add-on routes the selected IPv4 traffic
 through one healthy exit at a time.

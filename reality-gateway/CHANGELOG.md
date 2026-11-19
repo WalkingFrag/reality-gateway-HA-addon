@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+- Accept AWG profiles that Supervisor stored as a single line by restoring
+  known field boundaries before parsing. Existing profiles no longer block
+  adding a new AWG exit through the panel.
+- Show a specific, sanitized validation reason for common AWG errors.
+
 ## 0.3.0
 
 - Added a Home Assistant ingress panel with the current exit, per-exit health,

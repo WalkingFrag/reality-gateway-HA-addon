@@ -23,6 +23,31 @@ STATIC_PATH = Path("/usr/local/share/reality-gateway/ui")
 FILE_LOCK = threading.Lock()
 
 
+def awg_validation_message(error: ValueError) -> str:
+    """Explain known validation failures without echoing profile contents."""
+    message = str(error)
+    duplicates = {
+        "duplicate AWG ID": "AWG с таким ID уже добавлен.",
+        "duplicate AWG priority": "Приоритет AWG уже используется.",
+        "duplicate AWG address": "Адрес AWG-туннеля уже используется.",
+        "duplicate AWG endpoint": "AWG endpoint уже используется другим выходом.",
+    }
+    if message in duplicates:
+        return duplicates[message]
+    if message.startswith("invalid AWG profile #"):
+        return "Один из профилей AWG не содержит полных блоков [Interface] и [Peer]."
+    fields = {
+        "private_key": "PrivateKey", "peer_public_key": "PublicKey",
+        "preshared_key": "PresharedKey",
+        "header_protection_key": "HeaderProtectionKey",
+        "address": "Address", "endpoint": "Endpoint",
+    }
+    for internal, label in fields.items():
+        if message in (f"invalid {internal}", f"invalid AWG {internal}"):
+            return f"Проверьте поле {label} в профиле AWG."
+    return "Проверьте полный профиль AWG3 и существующие настройки AWG."
+
+
 def _command_output(args: list[str]) -> str:
     try:
         result = subprocess.run(args, capture_output=True, text=True,
@@ -207,10 +232,11 @@ class Handler(BaseHTTPRequestHandler):
             entry = (add_vless(VLESS_PATH, data["url"]) if path == "/api/vless"
                      else add_awg(AWG_PATH, OPTIONS_PATH, VLESS_PATH, data["name"], data["profile"]))
             self._json(201, entry)
-        except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+        except ValueError as exc:
             self._json(400, {"error": ("Проверьте VLESS+Reality ссылку и попробуйте снова."
-                                       if path == "/api/vless" else
-                                       "Проверьте полный профиль AWG3 и попробуйте снова.")})
+                                       if path == "/api/vless" else awg_validation_message(exc))})
+        except (KeyError, TypeError, AttributeError, OSError):
+            self._json(400, {"error": "Проверьте заполнение полей и настройки аддона."})
 
     def do_DELETE(self) -> None:
         if not self._allowed():

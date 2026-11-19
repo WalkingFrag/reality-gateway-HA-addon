@@ -9,13 +9,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "reality-gateway/ro
 
 from reality_gateway.config import load_config
 from reality_gateway.awg import render_awg_config
-from reality_gateway.webui import add_awg, remove_awg, dashboard_status
+from reality_gateway.webui import add_awg, remove_awg, dashboard_status, awg_validation_message
 from reality_gateway.status import config_fingerprint
 
 
-def profile(endpoint="198.51.100.1:1234"):
+def profile(endpoint="198.51.100.1:1234", address="10.8.1.12/32"):
     key = lambda byte: base64.b64encode(bytes([byte]) * 32).decode()
-    entry = {"address": "10.8.1.12/32", "private_key": key(1),
+    entry = {"address": address, "private_key": key(1),
              "header_protection_key": key(4), "peer_public_key": key(2),
              "preshared_key": key(3), "endpoint": endpoint,
              "jc": 5, "jmin": 10, "jmax": 50,
@@ -26,6 +26,7 @@ def profile(endpoint="198.51.100.1:1234"):
              "keepalive_timeout": "5-15", "max_handshake_attempts": "15-20",
              "persistent_keepalive": "25-35"}
     interface = ["[Interface]", f"Address = {entry['address']}",
+                 "DNS = 172.29.172.254, 1.0.0.1",
                  f"PrivateKey = {entry['private_key']}",
                  f"HeaderProtectionKey = {entry['header_protection_key']}"]
     for key in ("jc", "jmin", "jmax", "s1", "s2", "s3", "s4", "h1", "h2", "h3", "h4"):
@@ -36,12 +37,28 @@ def profile(endpoint="198.51.100.1:1234"):
     interface += ["RandomTrailers = on", "DisableCookies = on"]
     peer = ["[Peer]", f"PublicKey = {entry['peer_public_key']}",
             f"PresharedKey = {entry['preshared_key']}",
+            "AllowedIPs = 0.0.0.0/0, ::/0",
             f"Endpoint = {entry['endpoint']}",
             f"PersistentKeepalive = {entry['persistent_keepalive']}"]
     return "\n".join(interface + [""] + peer)
 
 
 class AwgUiTests(unittest.TestCase):
+    def test_validation_message_is_specific_and_never_echoes_input(self):
+        self.assertIn("endpoint", awg_validation_message(ValueError("duplicate AWG endpoint")))
+        self.assertNotIn("secret", awg_validation_message(ValueError("secret")))
+
+    def test_existing_flattened_profile_does_not_block_new_server(self):
+        with tempfile.TemporaryDirectory() as temp:
+            options = Path(temp) / "options.json"
+            vless = Path(temp) / "vless-exits.json"
+            awg = Path(temp) / "awg-profiles.json"
+            options.write_text(json.dumps({"awg_configs": [profile().replace("\n", " ")]}), encoding="utf-8")
+            added = add_awg(awg, options, vless, "Второй", profile(
+                endpoint="198.51.100.2:1234", address="10.8.1.13/32"))
+            config = load_config(options, vless, awg)
+            self.assertEqual([item.id for item in config.exits[:2]], ["exit1", added["id"]])
+
     def test_pasted_awg_appears_as_exit_and_can_be_removed(self):
         with tempfile.TemporaryDirectory() as temp:
             options = Path(temp) / "options.json"
@@ -74,8 +91,8 @@ class AwgUiTests(unittest.TestCase):
             awg = Path(temp) / "awg-profiles.json"
             options.write_text("{}", encoding="utf-8")
             add_awg(awg, options, vless, "Первый", profile())
-            with self.assertRaises(ValueError):
-                add_awg(awg, options, vless, "Второй", profile())
+            with self.assertRaisesRegex(ValueError, "duplicate AWG endpoint"):
+                add_awg(awg, options, vless, "Второй", profile(address="10.8.1.13/32"))
             self.assertEqual(len(json.loads(awg.read_text())), 1)
 
 
