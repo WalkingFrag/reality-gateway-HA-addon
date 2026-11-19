@@ -124,10 +124,11 @@ selected LAN client -> Keenetic Wireguard2 -> HA wg0 (10.20.30.1)
   project does not create remote VPS services. A 3.1 client config must match
   the server's 3.1 parameters. The builder will verify upstream Go/tools
   versions and build support for each advertised architecture before release.
-- The two supplied native AWG 3.1 configs identify two client peers on the
-  same endpoint. They do not provide server redundancy. Provision a separate
-  HA client on each distinct server and enter its values in the add-on options.
-  Do not store share links or client configs in the repository.
+- Two supplied native AWG 3.1 configs identify client peers on one endpoint;
+  a later third config identifies a second, distinct endpoint. Together they
+  provide the two-server topology needed for failover. Use one dedicated HA
+  client on each server and enter its values in the add-on options. Do not
+  store share links or client configs in the repository.
 
 ## Explicit limits
 

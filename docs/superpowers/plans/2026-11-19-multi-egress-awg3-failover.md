@@ -15,7 +15,7 @@
 - Existing WireGuard keys in `/data/wg-keys.env`, `wg0` peer settings, and existing VLESS options survive an upgrade.
 - No AWG3 exit list means the current VLESS-only behavior and first-run router key handoff remain usable.
 - AWG3 private keys and VLESS secrets never enter git or logs; validate all option values before changing routes.
-- The supplied AWG 3.1 configs are two peers on one endpoint. Provision a separate HA client on each distinct server; enter server and peer fields in the add-on Configuration tab, not files in the repository.
+- The supplied AWG 3.1 configs include two distinct server endpoints; the first two configs are peers on the same endpoint. Use one dedicated HA client on each server and enter server and peer fields in the add-on Configuration tab, not files in the repository.
 - The release routes selected IPv4 traffic only. The Keenetic must disable or block selected IPv6 traffic before cutover.
 - No host default route changes, HAOS kernel modules, standalone containers, or router credentials.
 - The production route is table 100 with mark 100. A less preferred blackhole route must remain after a selected interface disappears.
