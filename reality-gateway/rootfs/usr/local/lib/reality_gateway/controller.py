@@ -12,7 +12,7 @@ from .config import ExitSpec, GatewayConfig, load_config
 from .net import NetworkManager
 from .probe import probe
 from .singbox_config import vless_interface
-from .status import config_fingerprint, write_status
+from .status import ORDER_PATH, config_fingerprint, read_exit_order, write_status
 
 STATUS_PATH = Path("/run/reality-gateway/status.json")
 VLESS_PATH = Path("/data/vless-exits.json")
@@ -46,12 +46,13 @@ class GatewayState:
                 self.healthy[exit_id] = False
 
 
-def choose_exit(state: GatewayState, now: float) -> str | None:
+def choose_exit(state: GatewayState, now: float, order=(), manual=False) -> str | None:
     healthy = [exit for exit in state.exits if state.healthy.get(exit.id, False)]
     if not healthy:
         return None
-    preferred = min(healthy, key=lambda exit: exit.priority).id
-    if state.current and state.healthy.get(state.current, False):
+    ranks = {exit_id: rank for rank, exit_id in enumerate(order)}
+    preferred = min(healthy, key=lambda exit: (ranks.get(exit.id, len(ranks)), exit.priority)).id
+    if not manual and state.current and state.healthy.get(state.current, False):
         if state.current != preferred and now - state.switched_at < 120:
             return state.current
     return preferred
@@ -60,7 +61,7 @@ def choose_exit(state: GatewayState, now: float) -> str | None:
 class GatewayController:
     def __init__(self, config: GatewayConfig, network: NetworkManager,
                  prober=probe, ready=None, fingerprint="", awg_fingerprint="",
-                 status_path=None):
+                 status_path=None, order_path=None):
         self.config = config
         self.network = network
         self.prober = prober
@@ -70,6 +71,8 @@ class GatewayController:
         self.fingerprint = fingerprint
         self.awg_fingerprint = awg_fingerprint
         self.status_path = status_path
+        self.order_path = order_path
+        self.order = ()
 
     def step(self, now: float) -> None:
         for exit in self.config.exits:
@@ -78,7 +81,15 @@ class GatewayController:
                 for target in self.config.probes
             )
             self.state.record(exit.id, success)
-        selected = choose_exit(self.state, now)
+        self.apply_order(now, reconcile=True)
+
+    def apply_order(self, now: float, reconcile=False) -> None:
+        order = read_exit_order(self.order_path) if self.order_path else ()
+        changed = order != self.order
+        if not changed and not reconcile:
+            return
+        self.order = order
+        selected = choose_exit(self.state, now, order, manual=changed)
         selected_exit = next((item for item in self.config.exits if item.id == selected), None)
         interface = None if selected_exit is None else (
             vless_interface(selected) if selected_exit.kind == "vless" else "a_" + selected)
@@ -135,6 +146,7 @@ def main() -> None:
             fingerprint=fingerprint,
             awg_fingerprint=awg_fingerprint,
             status_path=STATUS_PATH,
+            order_path=ORDER_PATH,
             ready=lambda exit: (Path("/sys/class/net/" + vless_interface(exit.id)).exists()
                                 if exit.kind == "vless" else awg.is_running(exit.id)),
         )
@@ -149,7 +161,11 @@ def main() -> None:
                 elif exit.kind == "vless" and Path("/sys/class/net/" + vless_interface(exit.id)).exists():
                     network.configure_probe_route(vless_interface(exit.id), controller.marks[exit.id])
             controller.step(time.monotonic())
-            time.sleep(15)
+            for _ in range(15):
+                if not running:
+                    break
+                time.sleep(1)
+                controller.apply_order(time.monotonic())
     finally:
         network.select(None)
         publish_status(config.exits, None, {}, fingerprint, awg_fingerprint)

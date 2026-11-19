@@ -1,5 +1,5 @@
 name: "Reality Gateway"
-version: "0.3.1"
+version: "0.3.2"
 slug: reality_gateway
 description: "WireGuard gateway with AWG3 and VLESS egress failover"
 url: "https://github.com/WalkingFrag/reality-gateway-HA-addon"

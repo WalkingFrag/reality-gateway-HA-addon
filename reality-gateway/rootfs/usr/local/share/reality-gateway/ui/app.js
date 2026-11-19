@@ -15,7 +15,32 @@ const fmtAge = (seconds) => {
   return `${Math.floor(seconds / 3600)} ч назад`;
 };
 
+let draggedExit = null;
+let savingOrder = false;
+
+async function moveExit(exits, from, to) {
+  if (savingOrder || from === to) return;
+  const order = exits.map(item => item.id);
+  order.splice(to, 0, order.splice(from, 1)[0]);
+  savingOrder = true;
+  try {
+    const response = await fetch(api('api/exit-order'), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+      body: JSON.stringify({order}),
+    });
+    if (!response.ok) throw new Error();
+    $('order-message').textContent = 'Приоритет сохранён. Активный маршрут отмечен в списке.';
+  } catch {
+    $('order-message').textContent = 'Не удалось сохранить порядок. Повторите перемещение.';
+  } finally {
+    savingOrder = false;
+    await refresh();
+  }
+}
+
 function renderExits(exits, current, routeOk) {
+  if (draggedExit !== null || savingOrder) return;
   const list = $('exit-list'); list.replaceChildren();
   if (!exits.length) { const p = document.createElement('p'); p.className = 'empty'; p.textContent = 'Контроллер пока не передал список туннелей.'; list.append(p); return; }
   exits.forEach((item, index) => {
@@ -28,6 +53,35 @@ function renderExits(exits, current, routeOk) {
     const health = document.createElement('span'); health.className = `exit-health ${item.health}`;
     health.textContent = {healthy:'Доступен',unhealthy:'Недоступен',unknown:'Не проверяется'}[item.health] || 'Неизвестно';
     const active = document.createElement('span'); active.className = 'exit-active'; active.textContent = item.id === current ? (routeOk ? 'АКТИВЕН' : 'ВЫБРАН') : '';
+    const controls = document.createElement('div');
+    controls.className = 'exit-order';
+    for (const [offset, symbol, label] of [[-1, '↑', 'Поднять'], [1, '↓', 'Опустить']]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = symbol;
+      button.setAttribute('aria-label', label + ' ' + item.label);
+      button.disabled = index + offset < 0 || index + offset >= exits.length;
+      button.addEventListener('click', () => moveExit(exits, index, index + offset));
+      controls.append(button);
+    }
+    row.draggable = exits.length > 1;
+    row.addEventListener('dragstart', event => {
+      draggedExit = index;
+      event.dataTransfer.setData('text/plain', item.id);
+      event.dataTransfer.effectAllowed = 'move';
+    });
+    row.addEventListener('dragend', () => { draggedExit = null; });
+    row.addEventListener('dragover', event => {
+      if (draggedExit !== null) event.preventDefault();
+    });
+    row.addEventListener('drop', event => {
+      if (draggedExit === null) return;
+      event.preventDefault();
+      const from = draggedExit;
+      draggedExit = null;
+      moveExit(exits, from, index);
+    });
+    active.append(controls);
     row.append(num, title, health, active); list.append(row);
   });
 }

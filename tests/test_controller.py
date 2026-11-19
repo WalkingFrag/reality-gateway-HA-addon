@@ -10,6 +10,15 @@ from reality_gateway.config import GatewayConfig, ProbeTarget
 
 
 class ControllerTests(unittest.TestCase):
+    def test_manual_priority_bypasses_hold_and_keeps_fallback(self):
+        exits = (ExitSpec("awg1", "awg3", 10), ExitSpec("vless", "vless", 100))
+        state = GatewayState(exits, current="awg1", switched_at=100)
+        state.healthy = {"awg1": True, "vless": True}
+        order = ("vless", "awg1")
+        self.assertEqual(choose_exit(state, 101, order, manual=True), "vless")
+        state.healthy["vless"] = False
+        self.assertEqual(choose_exit(state, 101, order, manual=True), "awg1")
+
     def test_three_successful_rounds_select_awg(self):
         exits = (ExitSpec("awg1", "awg3", 10), ExitSpec("vless", "vless", 100))
         target = ProbeTarget("one.example", "192.0.2.1", "/", 200)

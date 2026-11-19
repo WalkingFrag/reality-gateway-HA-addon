@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2
+
+- Reorder tunnels by dragging rows or using the arrow buttons. The gateway
+  applies the saved priority without a restart and selects the first
+  available tunnel when the order changes.
+
 ## 0.3.1
 
 - Accept AWG profiles that Supervisor stored as a single line by restoring

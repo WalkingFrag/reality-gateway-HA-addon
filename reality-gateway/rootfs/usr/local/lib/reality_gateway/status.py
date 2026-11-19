@@ -6,6 +6,18 @@ import os
 from pathlib import Path
 import time
 
+ORDER_PATH = Path("/data/exit-order.json")
+
+
+def read_exit_order(path: Path) -> tuple[str, ...]:
+    try:
+        order = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ()
+    if isinstance(order, list) and all(isinstance(item, str) for item in order):
+        return tuple(order)
+    return ()
+
 
 def config_fingerprint(path: Path) -> str:
     return hashlib.sha256(path.read_bytes() if path.exists() else b"[]").hexdigest()

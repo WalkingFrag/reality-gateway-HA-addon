@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 
 from .config import load_config, parse_vless_url
 from .singbox_config import vless_interface
-from .status import config_fingerprint, read_wireguard
+from .status import ORDER_PATH, config_fingerprint, read_exit_order, read_wireguard
 
 STATUS_PATH = Path("/run/reality-gateway/status.json")
 VLESS_PATH = Path("/data/vless-exits.json")
@@ -168,8 +168,12 @@ def dashboard_status(status_path: Path, vless_path: Path, wg_dump: str,
             "awg_fingerprint", awg_fingerprint) != awg_fingerprint)
     except (OSError, ValueError, KeyError, TypeError):
         awg = []
+    order = read_exit_order(ORDER_PATH)
+    ranks = {exit_id: rank for rank, exit_id in enumerate(order)}
+    exits = sorted(runtime.get("exits", []),
+                   key=lambda item: (ranks.get(item["id"], len(ranks)), item["priority"])) if fresh else []
     return {"online": fresh, "current": current, "route_ok": route_ok,
-            "exits": runtime.get("exits", []) if fresh else [],
+            "exits": exits,
             "wireguard": read_wireguard(wg_dump, moment),
             "configured_vless": extras, "configured_awg": awg,
             "restart_required": restart_required,
@@ -221,7 +225,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(403, {"error": "forbidden"})
             return
         path = urlsplit(self.path).path
-        if path not in ("/api/vless", "/api/awg") or self.headers.get("X-Requested-With") != "XMLHttpRequest":
+        if path not in ("/api/vless", "/api/awg", "/api/exit-order") or self.headers.get("X-Requested-With") != "XMLHttpRequest":
             self._json(404, {"error": "not found"})
             return
         try:
@@ -229,10 +233,26 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < length <= 32768 or self.headers.get_content_type() != "application/json":
                 raise ValueError("invalid request")
             data = json.loads(self.rfile.read(length))
+            if path == "/api/exit-order":
+                with FILE_LOCK:
+                    runtime = json.loads(STATUS_PATH.read_text(encoding="utf-8"))
+                    order = data["order"]
+                    ids = {item["id"] for item in runtime["exits"]}
+                    if (time.time() - runtime["updated_at"] > 45 or not ids
+                            or not isinstance(order, list)
+                            or not all(isinstance(item, str) for item in order)
+                            or len(order) != len(ids) or set(order) != ids):
+                        raise ValueError("stale or invalid exit order")
+                    _save_extras(ORDER_PATH, order)
+                self._json(200, {"order": order})
+                return
             entry = (add_vless(VLESS_PATH, data["url"]) if path == "/api/vless"
                      else add_awg(AWG_PATH, OPTIONS_PATH, VLESS_PATH, data["name"], data["profile"]))
             self._json(201, entry)
         except ValueError as exc:
+            if path == "/api/exit-order":
+                self._json(409, {"error": "Список туннелей изменился. Повторите перемещение."})
+                return
             self._json(400, {"error": ("Проверьте VLESS+Reality ссылку и попробуйте снова."
                                        if path == "/api/vless" else awg_validation_message(exc))})
         except (KeyError, TypeError, AttributeError, OSError):
