@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+- Added multiple AmneziaWG 3.1 IPv4 exit servers configured in the add-on options.
+- Added marked HTTPS health checks, priority-based failover and delayed failback to VLESS+Reality.
+- Kept the existing router-to-Home Assistant WireGuard connection and VLESS-only configuration compatible.
+- Added a blackhole route for each candidate probe and the selected egress, so unavailable exits do not fall through to the host's normal route.
+- Added userspace AmneziaWG binaries and per-exit NAT and forwarding rules.
+
 ## 0.1.4
 
 - **Fixed:** real page loads (e.g. bbc.com) hung indefinitely even though

@@ -1,7 +1,7 @@
 name: "Reality Gateway"
-version: "0.1.4"
+version: "0.2.0"
 slug: reality_gateway
-description: "VLESS+Reality VPN fallback gateway: WireGuard server + sing-box TUN client"
+description: "WireGuard gateway with AWG3 and VLESS egress failover"
 url: "https://github.com/WalkingFrag/reality-gateway-HA-addon"
 arch:
   - amd64

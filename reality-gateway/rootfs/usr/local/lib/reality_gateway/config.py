@@ -43,19 +43,26 @@ def load_config(options_path: Path) -> GatewayConfig:
     ids, priorities, addresses, endpoints = set(), set(), set(), set()
     for item in raw_exits:
         name = item.get("id", "")
-        if not re.fullmatch(r"[a-z][a-z0-9_]{0,14}", name):
+        if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,12}", name) or name == "vless":
             raise ValueError("invalid AWG exit id")
         priority = item.get("priority")
-        if not isinstance(priority, int) or priority < 1 or priority > 99:
+        if not isinstance(priority, int) or isinstance(priority, bool) or priority < 1 or priority > 99:
             raise ValueError("invalid AWG priority")
         endpoint = item.get("endpoint", "")
         host, sep, port = endpoint.rpartition(":")
         if not sep or not host or not port.isdigit() or not 1 <= int(port) <= 65535:
             raise ValueError("invalid AWG endpoint")
         try:
+            if ip_address(host).version != 4:
+                raise ValueError("IPv4 endpoint required")
+        except ValueError as exc:
+            raise ValueError("invalid IPv4 AWG endpoint") from exc
+        try:
             address = str(ip_interface(item.get("address", "")))
         except ValueError as exc:
             raise ValueError("invalid AWG address") from exc
+        if ip_interface(address).version != 4:
+            raise ValueError("IPv4 AWG address required")
         if name in ids or priority in priorities or address in addresses or endpoint in endpoints:
             raise ValueError("duplicate id, priority, address, or endpoint")
         for field in ("private_key", "peer_public_key", "preshared_key", "header_protection_key"):
@@ -86,6 +93,8 @@ def load_config(options_path: Path) -> GatewayConfig:
     probes = []
     for item in raw_probes:
         ip = str(ip_address(item["ip"]))
+        if ip_address(ip).version != 4:
+            raise ValueError("IPv4 probe target required")
         host = item["host"]
         path = item["path"]
         status = item["expected_status"]

@@ -1,5 +1,45 @@
 # Reality Gateway
 
+Version 0.2.0 supports multiple AmneziaWG 3.1 (AWG3) exit servers and
+VLESS+Reality as the last fallback. Keenetic still connects to this add-on's
+`wg0` over ordinary WireGuard. The add-on routes the selected IPv4 traffic
+through one healthy exit at a time.
+
+Configure `awg_exits` in the add-on Configuration tab. Each list item is one
+AWG3 server and contains its own client `address`, `private_key`, peer keys,
+`endpoint`, and all AWG3 fields from its exported `[Interface]` and `[Peer]`
+configuration. Use distinct endpoints and priorities from 1 to 99; lower
+numbers are preferred. Enter `random_trailers` and `disable_cookies` as
+booleans (`true`/`false`), and keep range values such as `10-100` as strings.
+Copy credentials into the Home Assistant options only; do not commit them to
+this repository. The router's existing WireGuard settings do not change.
+
+When `awg_exits` is empty, the add-on uses its previous VLESS-only behavior.
+When AWG exits are configured, add at least two `probe_targets`, for example:
+
+```yaml
+probe_targets:
+  - host: www.cloudflare.com
+    ip: 104.16.123.96
+    path: /cdn-cgi/trace
+    expected_status: 200
+  - host: www.google.com
+    ip: 142.250.191.100
+    path: /generate_204
+    expected_status: 204
+```
+
+Use IPv4 addresses that currently serve the specified HTTPS host and path;
+verify them before entering them, since providers can change addresses.
+Each probe is forced through its own candidate exit. An exit becomes healthy
+after three successful rounds and unhealthy after three failed rounds. The
+controller checks every 15 seconds and waits at least two minutes before
+switching back to a higher-priority exit. When all exits fail, traffic from
+`wg0` is blocked. Existing connections may break when the exit changes.
+
+IPv6 exit traffic is not supported in this release. Block IPv6 for the
+selected router traffic so it cannot bypass this IPv4-only gateway.
+
 VLESS+Reality VPN fallback gateway for Home Assistant OS. Packages a
 WireGuard server (`wg0`) and a sing-box TUN client (`tun-reality`) that
 forwards WireGuard traffic out over a VLESS+Reality connection, for use

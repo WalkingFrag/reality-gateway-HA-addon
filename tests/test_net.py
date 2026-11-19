@@ -9,6 +9,14 @@ from reality_gateway.net import NetworkManager
 
 
 class NetworkTests(unittest.TestCase):
+    def test_probe_route_has_its_own_blackhole_and_mark(self):
+        commands = []
+        network = NetworkManager(lambda args, **kwargs: commands.append(args))
+        network.configure_probe_route("a_first", 101)
+        self.assertIn(["ip", "route", "replace", "blackhole", "default", "table", "101", "metric", "32767"], commands)
+        self.assertIn(["ip", "route", "replace", "default", "dev", "a_first", "table", "101", "metric", "100"], commands)
+        self.assertIn(["ip", "rule", "add", "fwmark", "101", "table", "101"], commands)
+
     def test_reconcile_does_not_duplicate_existing_policy_rule(self):
         commands = []
         calls = []
@@ -33,7 +41,8 @@ class NetworkTests(unittest.TestCase):
         self.assertTrue(blackhole)
         self.assertTrue(policy)
         self.assertLess(blackhole[0], policy[0])
-        self.assertFalse(any(cmd[:5] == ["ip", "route", "del", "blackhole", "default"] for cmd in commands))
+        self.assertIn(["ip", "route", "del", "blackhole", "default", "table", "100", "metric", "0"], commands)
+        self.assertIn(["ip", "route", "replace", "blackhole", "default", "table", "100", "metric", "32767"], commands)
         self.assertTrue(any(cmd[:4] == ["ip", "route", "del", "default"] for cmd in commands))
 
 
