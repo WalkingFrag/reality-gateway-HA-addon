@@ -132,6 +132,7 @@ render_singbox_config() {
   }
 }
 EOF
+    PYTHONPATH=/usr/local/lib python3 -m reality_gateway.singbox_config
     bashio::log.info "Rendered /etc/sing-box/config.json"
 
     if ! sing-box check -c /etc/sing-box/config.json; then

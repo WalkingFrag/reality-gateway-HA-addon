@@ -8,6 +8,8 @@ from ipaddress import ip_address, ip_interface
 import json
 from pathlib import Path
 import re
+from urllib.parse import parse_qs, unquote, urlsplit
+from uuid import UUID
 
 
 @dataclass(frozen=True)
@@ -16,6 +18,8 @@ class ExitSpec:
     kind: str
     priority: int
     awg_settings: dict | None = None
+    label: str | None = None
+    vless_settings: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -73,7 +77,55 @@ def parse_awg_text(text: str, index: int) -> dict:
     return fields
 
 
-def load_config(options_path: Path) -> GatewayConfig:
+def parse_vless_url(url: str) -> dict:
+    """Parse a VLESS+Reality share link without ever exposing its credentials."""
+    if not isinstance(url, str) or len(url) > 4096:
+        raise ValueError("invalid VLESS link")
+    try:
+        link = urlsplit(url)
+        if link.scheme != "vless" or not link.hostname or not link.port or not link.username:
+            raise ValueError("invalid VLESS link")
+        UUID(link.username)
+        if not 1 <= link.port <= 65535:
+            raise ValueError("invalid VLESS port")
+        host = link.hostname
+        if not re.fullmatch(r"[A-Za-z0-9.-]{1,253}", host) or ".." in host:
+            raise ValueError("invalid VLESS host")
+        query = parse_qs(link.query, keep_blank_values=True)
+        if any(len(values) != 1 for values in query.values()):
+            raise ValueError("duplicate VLESS parameter")
+        param = lambda key, default="": query.get(key, [default])[0]
+        if (param("security") != "reality" or param("encryption", "none") != "none"
+                or param("type", "tcp") != "tcp"):
+            raise ValueError("VLESS+Reality link required")
+        key = param("pbk")
+        decoded = base64.urlsafe_b64decode(key + "=" * (-len(key) % 4))
+        if len(decoded) != 32 or not re.fullmatch(r"[A-Za-z0-9_-]+", key):
+            raise ValueError("invalid Reality public key")
+        short_id = param("sid")
+        if not re.fullmatch(r"[0-9a-fA-F]{0,32}", short_id) or len(short_id) % 2:
+            raise ValueError("invalid Reality short ID")
+        sni = param("sni")
+        if not re.fullmatch(r"[A-Za-z0-9.-]{1,253}", sni) or ".." in sni:
+            raise ValueError("invalid Reality SNI")
+        flow = param("flow")
+        fingerprint = param("fp", "chrome")
+        if flow not in ("xtls-rprx-vision", "") or fingerprint not in ("chrome", "firefox", "safari", "edge"):
+            raise ValueError("unsupported VLESS flow or fingerprint")
+        label = unquote(link.fragment).strip() or host
+        if len(label) > 48 or any(ord(char) < 32 for char in label):
+            raise ValueError("invalid VLESS name")
+        return {"label": label, "server": host, "port": link.port,
+                "uuid": str(UUID(link.username)), "flow": flow,
+                "public_key": key, "short_id": short_id, "sni": sni,
+                "fingerprint": fingerprint}
+    except (ValueError, TypeError, binascii.Error) as exc:
+        raise ValueError("invalid VLESS+Reality link") from exc
+
+
+def load_config(options_path: Path, vless_path: Path = Path("/data/vless-exits.json"),
+                awg_path: Path = Path("/data/awg-profiles.json"),
+                managed_awg: list | None = None) -> GatewayConfig:
     options = json.loads(options_path.read_text(encoding="utf-8"))
     raw_exits = options.get("awg_exits") or []
     if not isinstance(raw_exits, list):
@@ -85,8 +137,22 @@ def load_config(options_path: Path) -> GatewayConfig:
         raise ValueError("use either awg_configs or awg_exits")
     if raw_profiles:
         raw_exits = [parse_awg_text(profile, index) for index, profile in enumerate(raw_profiles, 1)]
-    if not raw_exits:
-        return GatewayConfig((ExitSpec("vless", "vless", 100),), (), True)
+    if managed_awg is None:
+        managed_awg = json.loads(awg_path.read_text(encoding="utf-8")) if awg_path.exists() else []
+    if not isinstance(managed_awg, list) or len(managed_awg) > 20:
+        raise ValueError("invalid managed AWG list")
+    next_priority = max((item.get("priority", 0) for item in raw_exits), default=0)
+    for index, item in enumerate(managed_awg, 1):
+        if not isinstance(item, dict) or not re.fullmatch(r"w_[a-z0-9]{1,10}", str(item.get("id", ""))):
+            raise ValueError("invalid managed AWG ID")
+        name = item.get("name")
+        if not isinstance(name, str) or not 1 <= len(name.strip()) <= 48 or any(ord(char) < 32 for char in name):
+            raise ValueError("invalid managed AWG name")
+        if next_priority + index > 99:
+            raise ValueError("too many AWG exits")
+        parsed = parse_awg_text(item.get("profile"), index)
+        parsed.update(id=item["id"], priority=next_priority + index, label=name.strip())
+        raw_exits.append(parsed)
     exits = []
     ids, priorities, addresses, endpoints = set(), set(), set(), set()
     for item in raw_exits:
@@ -134,7 +200,26 @@ def load_config(options_path: Path) -> GatewayConfig:
         if min(item[f"s{i}"] for i in range(1, 5)) < 12:
             raise ValueError("AWG3 header protection requires S1-S4 >= 12")
         ids.add(name); priorities.add(priority); addresses.add(address); endpoints.add(endpoint)
-        exits.append(ExitSpec(name, "awg3", priority, item))
+        exits.append(ExitSpec(name, "awg3", priority, item, label=item.get("label")))
+    if vless_path.exists():
+        extra_vless = json.loads(vless_path.read_text(encoding="utf-8"))
+        if not isinstance(extra_vless, list) or len(extra_vless) > 20:
+            raise ValueError("invalid VLESS exit list")
+    else:
+        extra_vless = []
+    vless_ids = set()
+    for index, item in enumerate(extra_vless, 1):
+        if not isinstance(item, dict) or not re.fullmatch(r"v_[a-z0-9]{1,10}", str(item.get("id", ""))):
+            raise ValueError("invalid VLESS exit ID")
+        if item["id"] in vless_ids or item["id"] in ids:
+            raise ValueError("duplicate exit ID")
+        vless_ids.add(item["id"])
+        settings = parse_vless_url(item.get("url"))
+        exits.append(ExitSpec(item["id"], "vless", 100 + index, label=settings["label"],
+                              vless_settings=settings))
+    legacy_mode = not raw_exits and not extra_vless
+    if legacy_mode:
+        return GatewayConfig((ExitSpec("vless", "vless", 100, label="Основной VLESS"),), (), True)
     raw_probes = options.get("probe_targets") or [
         {"host": "one.one.one.one", "ip": "1.1.1.1", "path": "/cdn-cgi/trace", "expected_status": 200},
         {"host": "dns.google", "ip": "8.8.8.8", "path": "/resolve?name=example.com&type=A", "expected_status": 200},
@@ -152,5 +237,6 @@ def load_config(options_path: Path) -> GatewayConfig:
         if not host or not path.startswith("/") or not isinstance(status, int) or not 100 <= status <= 599:
             raise ValueError("invalid probe target")
         probes.append(ProbeTarget(host, ip, path, status))
-    exits.append(ExitSpec("vless", "vless", 100))
+    exits.append(ExitSpec("vless", "vless", 200 if extra_vless else 100,
+                          label="Основной VLESS"))
     return GatewayConfig(tuple(sorted(exits, key=lambda item: item.priority)), tuple(probes), False)

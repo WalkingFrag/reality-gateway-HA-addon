@@ -1,6 +1,7 @@
 """Host policy routing for traffic received on wg0."""
 
 import subprocess
+from .singbox_config import vless_interface
 
 
 class NetworkManager:
@@ -37,7 +38,7 @@ class NetworkManager:
                 self._rule("filter", "DOCKER-USER", ["-i", name, "-o", "wg0"], ["-j", "ACCEPT"])
                 self._rule("mangle", "FORWARD", ["-o", name, "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN"], ["-j", "TCPMSS", "--clamp-mss-to-pmtu"])
             elif exit.kind == "vless":
-                name = "tun-reality"
+                name = vless_interface(exit.id)
                 self._rule("filter", "DOCKER-USER", ["-i", "wg0", "-o", name], ["-j", "ACCEPT"])
                 self._rule("filter", "DOCKER-USER", ["-i", name, "-o", "wg0"], ["-j", "ACCEPT"])
                 self._rule("mangle", "FORWARD", ["-o", name, "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN"], ["-j", "TCPMSS", "--clamp-mss-to-pmtu"])

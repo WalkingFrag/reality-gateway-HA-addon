@@ -42,6 +42,11 @@ COPY --from=awggo /src/amneziawg-go/amneziawg-go /usr/local/bin/amneziawg-go
 COPY --from=awgtools /src/amneziawg-tools/src/wg /usr/local/bin/awg
 
 COPY rootfs /
-RUN chmod +x /etc/cont-init.d/10-setup.sh \
+RUN sed -i 's/\r$//' /etc/cont-init.d/10-setup.sh \
     /etc/services.d/singbox/run \
-    /etc/services.d/routing/run
+    /etc/services.d/routing/run \
+    /etc/services.d/webui/run \
+    && chmod +x /etc/cont-init.d/10-setup.sh \
+    /etc/services.d/singbox/run \
+    /etc/services.d/routing/run \
+    /etc/services.d/webui/run

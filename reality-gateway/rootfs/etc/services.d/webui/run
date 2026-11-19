@@ -1,0 +1,3 @@
+#!/command/with-contenv bashio
+set -euo pipefail
+exec env PYTHONPATH=/usr/local/lib python3 -m reality_gateway.webui

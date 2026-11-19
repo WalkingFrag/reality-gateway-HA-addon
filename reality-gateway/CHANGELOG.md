@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0
+
+- Added a Home Assistant ingress panel with the current exit, per-exit health,
+  policy-route confirmation and the router's WireGuard handshake/traffic state.
+- Added management of multiple VLESS+Reality exits by pasting share links.
+  Each exit has its own sing-box TUN and independent health probe; changes
+  take effect after an add-on restart.
+- Added AWG3 profile management to the ingress panel. Profiles are validated
+  against existing AWG exits before saving and take effect after restart.
+- Preserved the existing VLESS options and WireGuard keys on upgrade.
+- Reconcile the selected route after a TUN restart, even when the selected
+  exit ID has not changed.
+
 ## 0.2.1
 
 - Added `awg_configs`: paste each complete AWG3 text profile in one YAML field; list order controls priority.

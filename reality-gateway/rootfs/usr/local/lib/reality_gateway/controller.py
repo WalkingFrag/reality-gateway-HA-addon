@@ -11,6 +11,17 @@ from .awg import AwgManager
 from .config import ExitSpec, GatewayConfig, load_config
 from .net import NetworkManager
 from .probe import probe
+from .singbox_config import vless_interface
+from .status import config_fingerprint, write_status
+
+STATUS_PATH = Path("/run/reality-gateway/status.json")
+VLESS_PATH = Path("/data/vless-exits.json")
+AWG_PATH = Path("/data/awg-profiles.json")
+
+
+def publish_status(exits, current, healthy, fingerprint, awg_fingerprint):
+    write_status(STATUS_PATH, exits, current, healthy,
+                 fingerprint=fingerprint, awg_fingerprint=awg_fingerprint)
 
 
 @dataclass
@@ -48,13 +59,17 @@ def choose_exit(state: GatewayState, now: float) -> str | None:
 
 class GatewayController:
     def __init__(self, config: GatewayConfig, network: NetworkManager,
-                 prober=probe, ready=None):
+                 prober=probe, ready=None, fingerprint="", awg_fingerprint="",
+                 status_path=None):
         self.config = config
         self.network = network
         self.prober = prober
         self.ready = ready or (lambda exit: True)
         self.state = GatewayState(config.exits)
         self.marks = {exit.id: 101 + index for index, exit in enumerate(config.exits)}
+        self.fingerprint = fingerprint
+        self.awg_fingerprint = awg_fingerprint
+        self.status_path = status_path
 
     def step(self, now: float) -> None:
         for exit in self.config.exits:
@@ -64,14 +79,22 @@ class GatewayController:
             )
             self.state.record(exit.id, success)
         selected = choose_exit(self.state, now)
+        selected_exit = next((item for item in self.config.exits if item.id == selected), None)
+        interface = None if selected_exit is None else (
+            vless_interface(selected) if selected_exit.kind == "vless" else "a_" + selected)
         if selected != self.state.current:
-            interface = None if selected is None else (
-                "tun-reality" if selected == "vless" else "a_" + selected
-            )
-            self.network.select(interface)
+            self.network.select(interface if selected_exit is None or self.ready(selected_exit) else None)
             logging.info("Selected egress: %s", selected or "none")
             self.state.current = selected
             self.state.switched_at = now
+        elif selected_exit is not None:
+            # A TUN restart removes kernel routes even when the health threshold
+            # has not switched candidates. Reconcile the desired route every round.
+            self.network.select(interface if self.ready(selected_exit) else None)
+        if self.status_path is not None:
+            write_status(self.status_path, self.config.exits, self.state.current,
+                         self.state.healthy, fingerprint=self.fingerprint,
+                         awg_fingerprint=self.awg_fingerprint)
 
 
 def main() -> None:
@@ -83,6 +106,8 @@ def main() -> None:
         config = GatewayConfig((ExitSpec("vless", "vless", 100),), (), True)
     network = NetworkManager()
     awg = AwgManager()
+    fingerprint = config_fingerprint(VLESS_PATH)
+    awg_fingerprint = config_fingerprint(AWG_PATH)
     network.reconcile(config.exits)
     network.select(None)
     running = True
@@ -99,13 +124,18 @@ def main() -> None:
                 if Path("/sys/class/net/tun-reality").exists():
                     network.select("tun-reality")
                     break
+                publish_status(config.exits, None, {}, fingerprint, awg_fingerprint)
                 time.sleep(2)
             while running:
+                publish_status(config.exits, "vless", {}, fingerprint, awg_fingerprint)
                 time.sleep(15)
             return
         controller = GatewayController(
             config, network,
-            ready=lambda exit: (Path("/sys/class/net/tun-reality").exists()
+            fingerprint=fingerprint,
+            awg_fingerprint=awg_fingerprint,
+            status_path=STATUS_PATH,
+            ready=lambda exit: (Path("/sys/class/net/" + vless_interface(exit.id)).exists()
                                 if exit.kind == "vless" else awg.is_running(exit.id)),
         )
         while running:
@@ -116,12 +146,13 @@ def main() -> None:
                         network.configure_probe_route(interface, controller.marks[exit.id])
                     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
                         logging.warning("AWG exit %s unavailable: %s", exit.id, type(exc).__name__)
-                elif exit.kind == "vless" and Path("/sys/class/net/tun-reality").exists():
-                    network.configure_probe_route("tun-reality", controller.marks[exit.id])
+                elif exit.kind == "vless" and Path("/sys/class/net/" + vless_interface(exit.id)).exists():
+                    network.configure_probe_route(vless_interface(exit.id), controller.marks[exit.id])
             controller.step(time.monotonic())
             time.sleep(15)
     finally:
         network.select(None)
+        publish_status(config.exits, None, {}, fingerprint, awg_fingerprint)
         for exit in config.exits:
             if exit.kind == "awg3":
                 awg.stop(exit.id)

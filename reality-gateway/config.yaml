@@ -1,5 +1,5 @@
 name: "Reality Gateway"
-version: "0.2.1"
+version: "0.3.0"
 slug: reality_gateway
 description: "WireGuard gateway with AWG3 and VLESS egress failover"
 url: "https://github.com/WalkingFrag/reality-gateway-HA-addon"
@@ -8,6 +8,11 @@ arch:
   - aarch64
   - armv7
 host_network: true
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:router
+panel_title: Reality Gateway
+panel_admin: true
 privileged:
   - NET_ADMIN
 devices:

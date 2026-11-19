@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Reality Gateway</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">↗</span><div><strong>Reality Gateway</strong><small>Центр маршрутизации</small></div></div>
+      <div class="poll-state"><span class="pulse" id="poll-dot"></span><span id="poll-label">Загрузка состояния…</span></div>
+    </header>
+
+    <section class="overview" aria-label="Состояние соединения">
+      <div class="route-panel">
+        <div class="eyebrow"><span class="eyebrow-index">01 / МАРШРУТ</span><span id="route-badge" class="badge neutral">Проверка</span></div>
+        <p class="overline">ТЕКУЩИЙ ВЫХОД</p>
+        <h1 id="route-name">Получаем данные</h1>
+        <p id="route-detail" class="route-detail">Проверяем маршрут и доступность туннелей.</p>
+        <div class="path-line" aria-label="Путь трафика"><span>Keenetic</span><i></i><span>WireGuard</span><i></i><strong id="route-path">Выход</strong></div>
+      </div>
+      <div class="wg-panel">
+        <div class="eyebrow"><span class="eyebrow-index">02 / ВХОД</span><span id="wg-badge" class="badge neutral">Проверка</span></div>
+        <div class="wg-icon" aria-hidden="true"><span></span><span></span><span></span></div>
+        <h2>WireGuard от роутера</h2>
+        <p id="wg-detail" class="muted">Ожидаем данные интерфейса wg0.</p>
+        <dl class="wg-stats"><div><dt>Последний handshake</dt><dd id="wg-handshake">—</dd></div><div><dt>Получено</dt><dd id="wg-rx">—</dd></div><div><dt>Отправлено</dt><dd id="wg-tx">—</dd></div></dl>
+      </div>
+    </section>
+
+    <div id="restart-banner" class="restart-banner" hidden><span class="banner-icon" aria-hidden="true">!</span><div><strong>Изменения ожидают перезапуска</strong><p>Перезапустите аддон на странице Home Assistant, чтобы применить новые AWG/VLESS выходы.</p></div></div>
+
+    <section class="section exits-section" aria-labelledby="exits-heading">
+      <div class="section-head"><div><p class="overline">МАРШРУТЫ</p><h2 id="exits-heading">Все туннели</h2></div><span class="section-hint">Проверка каждые 15 секунд</span></div>
+      <div id="exit-list" class="exit-list" aria-live="polite"><p class="empty">Получаем список выходов…</p></div>
+    </section>
+
+    <section class="section manage-section" aria-labelledby="awg-heading">
+      <div class="section-head"><div><p class="overline">КОНФИГУРАЦИЯ</p><h2 id="awg-heading">Выходные AmneziaWG</h2></div></div>
+      <div class="manage-grid">
+        <div class="manage-copy"><p>Экспортируйте полный текстовый профиль AmneziaWG 3.1 и вставьте блоки <code>[Interface]</code> и <code>[Peer]</code>. Каждый сервер проверяется отдельно; первым выбирается выход с наивысшим приоритетом.</p><p>Профили из настроек Home Assistant сохраняются. Добавленные здесь выходы идут после них и перед VLESS.</p><div id="saved-awg-list" class="saved-list"></div></div>
+        <form id="awg-form" class="add-form"><label for="awg-name">Название выхода</label><input id="awg-name" name="name" required maxlength="48" placeholder="Например, Москва"><label for="awg-profile">Профиль AmneziaWG 3.1</label><textarea id="awg-profile" name="profile" rows="8" required spellcheck="false" autocomplete="off" placeholder="[Interface]&#10;Address = …&#10;PrivateKey = …&#10;…&#10;[Peer]&#10;PublicKey = …&#10;Endpoint = …"></textarea><p class="field-help">Приватные ключи хранятся только в данных аддона. В ответе панели они не передаются.</p><button type="submit" id="awg-add-button">Добавить AWG <span aria-hidden="true">↗</span></button><p id="awg-message" class="form-message" role="status" aria-live="polite"></p></form>
+      </div>
+    </section>
+
+    <section class="section manage-section" aria-labelledby="manage-heading">
+      <div class="section-head"><div><p class="overline">КОНФИГУРАЦИЯ</p><h2 id="manage-heading">Дополнительные VLESS</h2></div></div>
+      <div class="manage-grid">
+        <div class="manage-copy"><p>Вставьте ссылку <code>vless://</code> с параметрами Reality. Имя после <code>#</code> появится в списке туннелей.</p><p>Новые подключения проверяются отдельно и выбираются по порядку добавления после AWG. Основной VLESS из настроек аддона остаётся последним резервом.</p><div id="saved-list" class="saved-list"></div></div>
+        <form id="vless-form" class="add-form"><label for="vless-url">Ссылка VLESS + Reality</label><textarea id="vless-url" name="url" rows="4" required spellcheck="false" autocomplete="off" placeholder="vless://uuid@server:443?security=reality&amp;pbk=…&amp;sni=…#Имя"></textarea><p class="field-help">Ссылка содержит ключи доступа. Она хранится только в данных аддона и не возвращается в панель.</p><button type="submit" id="add-button">Добавить VLESS <span aria-hidden="true">↗</span></button><p id="form-message" class="form-message" role="status" aria-live="polite"></p></form>
+      </div>
+    </section>
+    <footer>Reality Gateway <span>·</span> Статус обновляется автоматически</footer>
+  </main>
+</body>
+</html>

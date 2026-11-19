@@ -1,7 +1,39 @@
 # Reality Gateway
 
-Version 0.2.1 supports multiple AmneziaWG 3.1 (AWG3) exit servers and
-VLESS+Reality as the last fallback. Keenetic still connects to this add-on's
+## Панель состояния (версия 0.3.0)
+
+После запуска откройте **Reality Gateway** в боковом меню Home Assistant
+или нажмите **Open Web UI** на странице аддона.
+Панель показывает выбранный выход, результат проверки каждого AWG/VLESS,
+наличие маршрута в таблице 100, а также handshake и счётчики трафика
+WireGuard-соединения с роутером. Отсутствие свежего handshake при простое
+не обязательно означает обрыв. В режиме только одного старого VLESS
+маршрут виден, но доступность сервера не проверяется.
+
+В панели также можно добавить выходной AmneziaWG 3.1 сервер: задайте имя и
+вставьте полный текстовый профиль с блоками `[Interface]` и `[Peer]`.
+Профиль проходит ту же строгую проверку, что `awg_configs`; повторяющиеся
+адреса и endpoints отклоняются до сохранения. Профили хранятся с правами
+`0600` в `/data/awg-profiles.json`, а ключи не возвращаются через API.
+Выходы, добавленные в панели, следуют после AWG из Configuration и перед
+VLESS. После изменения списка требуется перезапуск аддона.
+
+В панели можно добавить до 20 дополнительных VLESS+Reality серверов:
+вставьте полную `vless://` ссылку с `security=reality`, `pbk`, `sni` и
+именем после `#`. Поддерживаются TCP и flow `xtls-rprx-vision`.
+Ссылки сохраняются с правами доступа `0600` в `/data/vless-exits.json`.
+Панель не возвращает UUID, Reality short ID или ссылку через API.
+Дополнительные VLESS проверяются отдельно, в порядке добавления,
+после AWG3 и до основного VLESS. После добавления или удаления
+**перезапустите аддон** на странице Home Assistant; панель покажет
+напоминание. Старые поля основного VLESS и ключи WireGuard продолжают
+работать без миграции.
+
+Веб-панель доступна только через Home Assistant ingress. Прямой доступ
+к порту 8099 с локальной сети отклоняется.
+
+Version 0.3.0 supports multiple AmneziaWG 3.1 (AWG3) and VLESS+Reality
+exit servers. Keenetic still connects to this add-on's
 `wg0` over ordinary WireGuard. The add-on routes the selected IPv4 traffic
 through one healthy exit at a time.
 
@@ -46,7 +78,8 @@ booleans (`true`/`false`), and keep range values such as `10-100` as strings.
 Copy credentials into the Home Assistant options only; do not commit them to
 this repository. The router's existing WireGuard settings do not change.
 
-When `awg_exits` is empty, the add-on uses its previous VLESS-only behavior.
+When no AWG or additional VLESS exits are configured, the add-on uses its
+previous VLESS-only behavior.
 You can override the built-in checks with at least two `probe_targets`, for example:
 
 ```yaml
